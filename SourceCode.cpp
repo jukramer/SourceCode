@@ -1,6 +1,35 @@
 #include <stdio.h>
+#include <list>
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
+
+///////////////// CLASSES ///////////////////////
+class Node
+{
+    public:
+        Node(const std::list<int>& pos, double g, double h) {
+            const std::list<int> pos = pos;
+            double g = g;
+            double h = h;
+        }
+};
+
+
+////////////////// FUNCTIONS ////////////////////
+void floodFill()
+{
+    ;
+}
+
+void calcHeuristic()
+{
+    ;
+}
+
+void aStar()
+{
+    ;
+}
 
 
 int main()
@@ -21,3 +50,4 @@ int main()
         sleep_ms(1000);
     }
 }
+
