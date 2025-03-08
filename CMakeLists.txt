@@ -29,13 +29,15 @@ set(PICO_BOARD pico_w CACHE STRING "Board type")
 include(pico_sdk_import.cmake)
 
 project(SourceCode C CXX ASM)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(SourceCode SourceCode.c )
+add_executable(SourceCode SourceCode.cpp )
 
 pico_set_program_name(SourceCode "SourceCode")
 pico_set_program_version(SourceCode "0.1")
