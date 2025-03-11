@@ -3,6 +3,7 @@
 #include <list>
 #include <algorithm>
 #include <vector>
+#include <stack>
 // #include "pico/stdlib.h"
 // #include "pico/cyw43_arch.h"
 
@@ -25,14 +26,18 @@ class Mouse
 {
     public:
         int cellX=1, cellY=1; // position in maze grid
+        bool posChanged = false; // true if the cell position of the mouse has changed
         int orientation = 0; // heading/orientation of mouse: 0=up, 1=right, 2=down, 3=left
+        std::stack<std::vector<int>> cellPath;
+
         int phase = 0; //0: mapping phase   1: pathfinding phase   2: solving phase
+
+        // Maze map in matrix
         int n = 16;
+        std::vector<std::vector<std::vector<int>>> mazeMatrix{n, std::vector<std::vector<int>>(n, std::vector<int>(5, 0))};  
         
         bool turnLeft = false, turnRight = false, goStraight = false; // variables that determine if specific movements are possible
         std::vector<bool> possMovements = {turnLeft, turnRight, goStraight};
-
-        std::vector<std::vector<std::vector<int>>> mazeMatrix{n, std::vector<std::vector<int>>(n, std::vector<int>(5, 0))};  
 
         Mouse() {
             ;
@@ -46,8 +51,15 @@ class Mouse
 void mapping(Mouse mouse) // handle overall movement of the mouse
 {
     // movement handling here
-    
-    dfs(mouse); 
+
+    if (mouse.posChanged) {
+        mouse.cellPath.push({mouse.cellX, mouse.cellY});
+        dfs(mouse); 
+    }
+
+    if (std::none_of(mouse.possMovements.begin(), mouse.possMovements.end(), [](bool b) { return b; })) {
+
+    };
 }
 
 std::vector<int> cellMapper(Mouse mouse)
