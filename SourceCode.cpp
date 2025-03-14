@@ -4,18 +4,21 @@
 #include <algorithm>
 #include <vector>
 #include <stack>
-// #include "pico/stdlib.h"
-// #include "pico/cyw43_arch.h"
+#include "pico/stdlib.h"
+#include "pico/cyw43_arch.h"
+#include "pins.hpp"
+
 
 ///////////////// CLASSES ///////////////////////
+
 class Node
 {
     public:
         double g, h; // A* values
-        std::vector<float> pos; // position vector: <x,y>
+        std::vector<float> pos; //position vector: <x,y>
 
-        Node(std::vector<float> pos, double g, double h) {
-            std::vector<float> pos = pos;
+        Node(std::vector<float> position, double g, double h) {
+            std::vector<float> pos = position;
             g = g;
             h = h;
         }
@@ -25,10 +28,17 @@ class Node
 class Mouse
 {
     public:
-        int cellX=1, cellY=1; // position in maze grid
+        int cellX=0, cellY=0; // position in maze grid
+        std::vector<int> cellPos = {cellX, cellY};
+
+        std::vector<std::vector<int>> adjacentCells;
+
+        int targetCellX, targetCellY; // cell that the mouse wants to travel to next
+        std::vector<int> targetCell = {targetCellX, targetCellY};
+
         bool posChanged = false; // true if the cell position of the mouse has changed
         int orientation = 0; // heading/orientation of mouse: 0=up, 1=right, 2=down, 3=left
-        std::stack<std::vector<int>> cellPath;
+        std::stack<std::vector<int>> visitedCells;
 
         int phase = 0; //0: mapping phase   1: pathfinding phase   2: solving phase
 
@@ -42,27 +52,14 @@ class Mouse
         Mouse() {
             ;
         }
-        
 };
+
+
 
 
 ////////////////// FUNCTIONS ////////////////////
 
-void mapping(Mouse mouse) // handle overall movement of the mouse
-{
-    // movement handling here
-
-    if (mouse.posChanged) {
-        mouse.cellPath.push({mouse.cellX, mouse.cellY});
-        dfs(mouse); 
-    }
-
-    if (std::none_of(mouse.possMovements.begin(), mouse.possMovements.end(), [](bool b) { return b; })) {
-
-    };
-}
-
-std::vector<int> cellMapper(Mouse mouse)
+std::vector<int> cellConfig(Mouse mouse)
 {
     // assign dl, dr, and df via tof sensors later!
 
@@ -88,9 +85,93 @@ std::vector<int> cellMapper(Mouse mouse)
 }
 
 
-void dfs(Mouse mouse)
+bool contains(std::stack<std::vector<int>> stack, const std::vector<int>& target)
 {
-    mouse.mazeMatrix[mouse.cellX-1][mouse.cellY-1] = cellMapper(mouse); // assign cell vector to each matrix cell
+    //Convert stack to temporary vector while searching
+    while (!stack.empty()) {
+        if (stack.top() == target) {
+            return true;
+        }
+        stack.pop();
+    }
+    return false;
+}
+
+
+void turnPossible(Mouse mouse) 
+{
+    if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 0) {
+        mouse.turnLeft = true;
+    } else if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 1) {
+        mouse.turnLeft = false;
+    }
+
+    if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 0) {
+        mouse.turnLeft = true;
+    } else if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 1) {
+        mouse.turnLeft = false;
+    }
+
+    if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 0) {
+        mouse.turnLeft = true;
+    } else if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 1) {
+        mouse.turnLeft = false;
+    }
+}
+
+
+void mapping(Mouse mouse) // handle overall movement of the mouse
+{
+    // movement handling here
+
+    if (mouse.posChanged) {
+        mouse.posChanged = false;
+        if (mouse.visitedCells.top() != mouse.cellPos) {
+            mouse.visitedCells.push({mouse.cellX, mouse.cellY});
+        }
+
+        mouse.mazeMatrix[mouse.cellX-1][mouse.cellY-1] = cellConfig(mouse); // assign cell vector to each matrix cell
+        
+        // Find adjacent cells to mouse
+        std::vector<std::vector<int>> adjacentCells;
+        adjacentCells[0] = {mouse.cellX-1, mouse.cellY}; // cell to left of mouse
+        adjacentCells[1] = {mouse.cellX, mouse.cellY-1}; // cell in front of mouse
+        adjacentCells[2] = {mouse.cellX+1, mouse.cellY}; // cell to right of mouse
+
+        std::rotate(adjacentCells.begin(), adjacentCells.end()-mouse.orientation, adjacentCells.end()); // account for mouse orientation
+
+        // set mouse adjacentCells
+        mouse.adjacentCells = adjacentCells;
+
+        // Find if adjacent cell has been visited or not
+        if (mouse.possMovements[0] && contains(mouse.visitedCells, adjacentCells[0])) {
+            mouse.targetCell = adjacentCells[0];
+        } else if (mouse.possMovements[1] && contains(mouse.visitedCells, adjacentCells[1])) {
+            mouse.targetCell = adjacentCells[1];
+        } else if (mouse.possMovements[2] && contains(mouse.visitedCells, adjacentCells[2])) {
+            mouse.targetCell = adjacentCells[2];
+        } else {
+            mouse.targetCell = mouse.visitedCells.top();
+            mouse.visitedCells.pop();
+        }
+    }
+
+    // Check if all cells have been mapped
+    int uncheckedCells = 0;
+    
+    while (int checkedCells = 0) {
+        for (int i=0; i < mouse.n; i++) {
+            for (int j=0; i<mouse.n; j++) {
+                if (mouse.mazeMatrix[i][j][4]==0) {
+                    uncheckedCells += 1;
+                }
+            }
+        }  
+    } 
+
+    if (uncheckedCells = 0) {
+        mouse.phase = 1;
+    }
 }
 
 
@@ -108,31 +189,41 @@ void aStar()
 
 int main()
 {
-    // while (true) {
-    //     printf("Hello, world!\n");
-    //     sleep_ms(1000);
-    // }
+    
 
-    // Initialize mouse
-    // stdio_init_all();
+
+    // Initialize mouse 
     Mouse mouse;
+    gpio_init(ledPin);
+    gpio_set_dir(ledPin, GPIO_OUT);
+    stdio_init_all();
 
     // main loop
     while (true) {
-
-        // Mapping phase
-        if (mouse.phase == 0) {
-            mapping(mouse);
-        }
-        // Pathfinding phase (super short)
-        else if (mouse.phase == 1) {
-            ;
-        }
-        // Solving phase (mouse zoom)
-        else if (mouse.phase == 2) {
-            ;
-        }
+        printf("LED on!");
+        gpio_put(ledPin, 1);
+        sleep_ms(500);
+        printf("LED off!");
+        gpio_put(ledPin, 0);
+        sleep_ms(500);
     }
+
+
+    // while (true) {
+
+    //     // Mapping phase
+    //     if (mouse.phase == 0) {
+    //         mapping(mouse);
+    //     }
+    //     // Pathfinding phase (super short)
+    //     else if (mouse.phase == 1) {
+    //         ;
+    //     }
+    //     // Solving phase (mouse zoom)
+    //     else if (mouse.phase == 2) {
+    //         ;
+    //     }
+    // }
     
     
 
