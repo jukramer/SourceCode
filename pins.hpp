@@ -25,6 +25,15 @@ const uint mlencPin = 26;
 const uint mrencPin = 27;
 const uint btnPin = 28;
 
+const uint allPins[] = {
+    imusclPin, imusdaPin, dirA1Pin, dirA2Pin, spdAPin,
+    dirB1Pin, dirB2Pin, spdBPin, dirC1Pin, dirC2Pin, spdCPin,
+    dirD1Pin, dirD2Pin, spdDPin, tofsclPin, tofsdaPin, tofXL1Pin,
+    tofXS1Pin, tofXS2Pin, tofXS3Pin, tofXS4Pin, imuIntPin, ledPin,
+    mlencPin, mrencPin, btnPin
+};
+
+
 
 
 

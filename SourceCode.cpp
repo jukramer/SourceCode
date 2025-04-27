@@ -4,9 +4,9 @@
 #include <algorithm>
 #include <vector>
 #include <stack>
-#include "pico/stdlib.h"
-#include "pico/cyw43_arch.h"
-#include "pins.hpp"
+// #include "pico/stdlib.h"
+// #include "pico/cyw43_arch.h"
+// #include "pins.hpp"
 
 
 ///////////////// CLASSES ///////////////////////
@@ -38,7 +38,8 @@ class Mouse
 
         bool posChanged = false; // true if the cell position of the mouse has changed
         int orientation = 0; // heading/orientation of mouse: 0=up, 1=right, 2=down, 3=left
-        std::stack<std::vector<int>> visitedCells;
+        std::stack<std::vector<int>> cellPath;
+        std::vector<std::vector<int>> visitedCells;
 
         int phase = 0; //0: mapping phase   1: pathfinding phase   2: solving phase
 
@@ -53,8 +54,6 @@ class Mouse
             ;
         }
 };
-
-
 
 
 ////////////////// FUNCTIONS ////////////////////
@@ -126,8 +125,8 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
 
     if (mouse.posChanged) {
         mouse.posChanged = false;
-        if (mouse.visitedCells.top() != mouse.cellPos) {
-            mouse.visitedCells.push({mouse.cellX, mouse.cellY});
+        if (mouse.cellPath.top() != mouse.cellPos) {
+            mouse.cellPath.push({mouse.cellX, mouse.cellY});
         }
 
         mouse.mazeMatrix[mouse.cellX-1][mouse.cellY-1] = cellConfig(mouse); // assign cell vector to each matrix cell
@@ -144,15 +143,15 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
         mouse.adjacentCells = adjacentCells;
 
         // Find if adjacent cell has been visited or not
-        if (mouse.possMovements[0] && contains(mouse.visitedCells, adjacentCells[0])) {
+        if (mouse.possMovements[0] && contains(mouse.cellPath, adjacentCells[0])) {
             mouse.targetCell = adjacentCells[0];
-        } else if (mouse.possMovements[1] && contains(mouse.visitedCells, adjacentCells[1])) {
+        } else if (mouse.possMovements[1] && contains(mouse.cellPath, adjacentCells[1])) {
             mouse.targetCell = adjacentCells[1];
-        } else if (mouse.possMovements[2] && contains(mouse.visitedCells, adjacentCells[2])) {
+        } else if (mouse.possMovements[2] && contains(mouse.cellPath, adjacentCells[2])) {
             mouse.targetCell = adjacentCells[2];
         } else {
-            mouse.targetCell = mouse.visitedCells.top();
-            mouse.visitedCells.pop();
+            mouse.targetCell = mouse.cellPath.top();
+            mouse.cellPath.pop();
         }
     }
 
@@ -189,23 +188,24 @@ void aStar()
 
 int main()
 {
-    
-
-
     // Initialize mouse 
     Mouse mouse;
-    gpio_init(ledPin);
-    gpio_set_dir(ledPin, GPIO_OUT);
-    stdio_init_all();
+    for (int i = 0; i < 27; i++){
+        // gpio_init(allPins[i]);
+        // gpio_set_dir(allPins[i], GPIO_OUT);
+        ;
+    }
+    
+    // stdio_init_all();
 
     // main loop
     while (true) {
         printf("LED on!");
-        gpio_put(ledPin, 1);
-        sleep_ms(500);
+        // gpio_put(ledPin, 1);
+        // sleep_ms(500);
         printf("LED off!");
-        gpio_put(ledPin, 0);
-        sleep_ms(500);
+        // gpio_put(ledPin, 0);
+        // sleep_ms(500);
     }
 
 
