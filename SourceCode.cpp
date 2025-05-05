@@ -3,6 +3,7 @@
 #include <list>
 #include <algorithm>
 #include <vector>
+#include <queue>
 #include <stack>
 #include "functions.h"
 // #include "pico/stdlib.h"
@@ -31,6 +32,7 @@ class Mouse
     public:
         int cellX=0, cellY=0; // position in maze grid
         std::vector<int> cellPos = {cellX, cellY};
+        int solvingType = 0; // 0 = floodfill, 1 = a*, 2 = custom
 
         std::vector<std::vector<int>> adjacentCells;
 
@@ -184,6 +186,33 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
     }
 }
 
+std::vector<int> getNeighbors(std::vector<int> cell) 
+{
+    std::vector<std::vector<int>> neighbors = {};
+    int x0 = cell[0], int y0 = cell[1];
+    int x1 = x0-1, int y1 = y0; // left cell
+    if (x1 !< 0 && x1 !> 16 && y1 !< 0 && y1 !> 16) {
+        neighbors.push_back({x1, y1});
+    }
+
+    int x2 = x0, int y2 = y0 + 1; // top cell
+    if (x2 !< 0 && x2 !> 16 && y2 !< 0 && y2 !> 16) {
+        neighbors.push_back({x2, y2});
+    }
+
+    int x3 = x0+1, int y3 = y0; // right cell
+    if (x3 !< 0 && x3 !> 16 && y3 !< 0 && y3 !> 16) {
+        neighbors.push_back({x3, y3});
+    }
+
+    int x4 = x0, int y4 = y0-1; // bottom cell
+    if (x4 !< 0 && x4 !> 16 && y4 !< 0 && y4 !> 16) {
+        neighbors.push_back({x4, y4});
+    }
+
+    return neighbors;
+}
+
 
 void floodFill()
 {
@@ -212,31 +241,33 @@ int main()
     // stdio_init_all();
 
     // main loop
-    // while (true) {
-    //     printf("LED on!");
-    //     // gpio_put(ledPin, 1);
-    //     // sleep_ms(500);
-    //     printf("LED off!");
-    //     // gpio_put(ledPin, 0);
-    //     // sleep_ms(500);
-    // }
+    gpio_put(ledPin, 1);
+    while (true) {
+        printf("LED on!");
+        // gpio_put(ledPin, 1);
+        // sleep_ms(500);
+        printf("LED off!");
+        // gpio_put(ledPin, 0);
+        // sleep_ms(500);
+    }
+    
+    if (mouse.solvingType == 0) {
+        x0 = mouse.cellPos[0];
+        y0 = mouse.cellPos[1];
+        mouse.mazeMatrix[x0][y0] = cellConfig(mouse);
+        std::queue<std::vector<int>> floodQueue;
+        
+        // Add goal cells to queue
+        floodQueue.push({7,7});
+        floodQueue.push({7,8});
+        floodQueue.push({8,7});
+        floodQueue.push({8,8});
 
-
-    // while (true) {
-
-    //     // Mapping phase
-    //     if (mouse.phase == 0) {
-    //         mapping(mouse);
-    //     }
-    //     // Pathfinding phase (super short)
-    //     else if (mouse.phase == 1) {
-    //         ;
-    //     }
-    //     // Solving phase (mouse zoom)
-    //     else if (mouse.phase == 2) {
-    //         ;
-    //     }
-    // }
-    std::cin.get();
+        while (floodQueue.size() != 0) {
+            currentCell = floodQueue.front()
+            
+        }
+        std::cin.get();
+    }
 }
 
