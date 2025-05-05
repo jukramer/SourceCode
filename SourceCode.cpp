@@ -5,6 +5,7 @@
 #include <vector>
 #include <queue>
 #include <stack>
+#include "functions.h"
 // #include "pico/stdlib.h"
 // #include "pico/cyw43_arch.h"
 // #include "pins.hpp"
@@ -47,13 +48,23 @@ class Mouse
 
         // Maze map in matrix
         int n = 16;
-        std::vector<std::vector<std::vector<int>>> mazeMatrix{n, std::vector<std::vector<int>>(n, std::vector<int>(5, 0))};  
+        std::vector<int> mazeMatrix[16][16]; 
         
         bool turnLeft = false, turnRight = false, goStraight = false; // variables that determine if specific movements are possible
         std::vector<bool> possMovements = {turnLeft, turnRight, goStraight};
 
+        // Flood matrix
+        int floodMatrix[16][16];
+
         Mouse() {
-            ;
+            for (int i=0; i<n; i++) {
+                for (int j=0; j<n; j++) {
+                    floodMatrix[i][j] = manhattanDist({i, j}, {{7,7}, {7,8}, {8,7}, {8,8}});
+                    std::cout << floodMatrix[i][j] << " ";
+                }
+                std::cout << std::endl;
+            }
+            std::cout << floodMatrix[8][8];
         }
 };
 
@@ -131,7 +142,7 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
             mouse.cellPath.push({mouse.cellX, mouse.cellY});
         }
 
-        mouse.mazeMatrix[mouse.cellX-1][mouse.cellY-1] = cellConfig(mouse); // assign cell vector to each matrix cell
+        // mouse.mazeMatrix[mouse.cellX-1][mouse.cellY-1] = cellConfig(mouse); // assign cell vector to each matrix cell
         
         // Find adjacent cells to mouse
         std::vector<std::vector<int>> adjacentCells;
@@ -224,10 +235,13 @@ int main()
         // gpio_set_dir(allPins[i], GPIO_OUT);
         ;
     }
+
+    
     
     // stdio_init_all();
 
     // main loop
+    gpio_put(ledPin, 1);
     while (true) {
         printf("LED on!");
         // gpio_put(ledPin, 1);
@@ -253,6 +267,7 @@ int main()
             currentCell = floodQueue.front()
             
         }
+        std::cin.get();
     }
 }
 
