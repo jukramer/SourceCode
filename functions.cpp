@@ -1,5 +1,9 @@
+#include <stdio.h>
+#include <iostream>
 #include <vector>
 #include <algorithm>
+#include <iomanip>
+
 
 int manhattanDist(std::vector<int> cell1, std::vector<std::vector<int>> cells)
 {
@@ -14,3 +18,5 @@ int manhattanDist(std::vector<int> cell1, std::vector<std::vector<int>> cells)
 
     return minVal;
 }
+
+
