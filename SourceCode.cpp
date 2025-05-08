@@ -13,6 +13,8 @@
 #include "functions.h"
 #include "range.h"
 
+#include "API.h"
+
 // #include "pico/stdlib.h"
 // #include "pico/cyw43_arch.h"
 // #include "pins.hpp"
@@ -38,6 +40,16 @@ struct Point
     int y = 0;
 };
 
+Point operator+(Point p1, Point p2) {
+    return { p1.x + p2.x, p2.x + p2.y };
+}
+
+Point& operator+=(Point &p1, Point p2) {
+    p1.x += p2.x;
+    p1.y += p2.y;
+    return p1;
+}
+
 bool operator==(Point p1, Point p2)
 {
     return p1.x == p2.x && p1.y == p2.y;
@@ -58,9 +70,36 @@ struct Cell {
 
 enum Direction { TOP = 0, RIGHT = 1, BOTTOM = 2, LEFT = 3 };
 
-int opposite(int dir) {
-    return (dir + 2) % 4;
+Direction opposite(Direction dir) {
+    return (Direction) (((int)dir + 2) % 4);
 }
+
+Direction rotate_direction_left(Direction dir) {
+    if (dir == TOP) {
+        return LEFT;
+    } else if (dir == LEFT) {
+        return BOTTOM;
+    } else if (dir == BOTTOM) {
+        return RIGHT;
+    } else {
+        return TOP;
+    }
+}
+
+Direction rotate_direction_right(Direction dir) {
+    if (dir == TOP) {
+        return RIGHT;
+    } else if (dir == RIGHT) {
+        return BOTTOM;
+    } else if (dir == BOTTOM) {
+        return LEFT;
+    } else {
+        return TOP;
+    }
+}
+
+// Note: Must be in the same order as the bit fields in Cell!
+const Point DIRECTIONS[4] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 
 class Node
 {
@@ -80,18 +119,16 @@ public:
 class Mouse
 {
 public:
-    int cellX = 0, cellY = 0; // position in maze grid
-    Point cellPos = {cellX, cellY};
+    Point cellPos = {0, MAZE_SIZE -1};
+    Direction orientation = Direction::TOP;
+
     int state = IDLE;
     int solvingType = 0; // 0 = floodfill, 1 = a*, 2 = custom  -  replace with states?
 
     std::vector<Point> adjacentCells;
-
-    int targetCellX, targetCellY; // cell that the mouse wants to travel to next
-    Point targetCell = {targetCellX, targetCellY};
+    Point targetCell = {0, 0};
 
     bool posChanged = false; // true if the cell position of the mouse has changed
-    int orientation = 0;     // heading/orientation of mouse: 0=up, 1=right, 2=down, 3=left
     std::stack<Point> cellPath;
     std::vector<Point> visitedCells;
 
@@ -100,14 +137,30 @@ public:
     // Maze map in matrix
     Cell mazeMatrix[MAZE_SIZE][MAZE_SIZE] = {}; // Init to empty with = {};
 
-    bool turnLeft = false, turnRight = false, goStraight = false; // variables that determine if specific movements are possible
-    std::vector<bool> possMovements = {turnLeft, turnRight, goStraight};
-
     // Flood matrix
     int floodMatrix[MAZE_SIZE][MAZE_SIZE] = {};
 
     Mouse()
     {
+    }
+
+    void turnLeft() {
+        API::turnLeft();
+        orientation = rotate_direction_left(orientation);
+    }
+
+    void turnRight() {
+        API::turnRight();
+        orientation = rotate_direction_right(orientation);
+    }
+
+    void move(Direction targetDir) {
+        while (targetDir != orientation) {
+            turnLeft();
+        }
+
+        API::moveForward();
+        cellPos += DIRECTIONS[targetDir];
     }
 };
 
@@ -188,7 +241,7 @@ void turnPossible(Mouse mouse)
 void mapping(Mouse mouse) // handle overall movement of the mouse
 {
     // movement handling here
-
+/*
     if (mouse.posChanged)
     {
         mouse.posChanged = false;
@@ -247,10 +300,10 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
         }
     }
 
-    if (uncheckedCells = 0)
+    if (uncheckedCells == 0)
     {
         mouse.phase = 1;
-    }
+    }*/
 }
 
 std::vector<Point> getNeighbors(const Point& cell)
@@ -358,6 +411,21 @@ void setWall(Mouse &mouse, int x, int y, Direction dir) {
     }
 }
 
+
+void scanWalls(Mouse &mouse)
+{
+    if (API::wallFront()) {
+        setWall(mouse, mouse.cellPos.x, mouse.cellPos.y, mouse.orientation);
+    }
+    if (API::wallLeft()) {
+        setWall(mouse, mouse.cellPos.x, mouse.cellPos.y, rotate_direction_left(mouse.orientation));
+    }
+    if (API::wallRight()) {
+        setWall(mouse, mouse.cellPos.x, mouse.cellPos.y, rotate_direction_right(mouse.orientation));
+    }
+}
+
+
 void floodFill(Mouse &mouse)
 {
     // timer to check computation time
@@ -383,9 +451,6 @@ void floodFill(Mouse &mouse)
     floodQueue.insert(floodQueue.begin(), {8, 7});
     floodQueue.insert(floodQueue.begin(), {8, 8});
 
-    // Note: Must be in the same order as the bit fields in Cell!
-    const Point directions[4] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-    
     int c = 0; // Cell counter
     while (!floodQueue.empty()) {
         Point current = floodQueue.back();
@@ -395,15 +460,15 @@ void floodFill(Mouse &mouse)
         int x = current.x, y = current.y;
         int dist = mouse.floodMatrix[y][x];
 
-        for (int i : range(len(directions))) {
-            int nx = x + directions[i].x;
-            int ny = y + directions[i].y;
+        for (int i : range(len(DIRECTIONS))) {
+            int nx = x + DIRECTIONS[i].x;
+            int ny = y + DIRECTIONS[i].y;
 
             if (nx < 0 || nx >= 16 || ny < 0 || ny >= 16)
                 continue;
 
             bool wallHere = (mouse.mazeMatrix[y][x].walls & (1 << i));
-            bool wallThere = (mouse.mazeMatrix[ny][nx].walls & (1 << opposite(i)));
+            bool wallThere = (mouse.mazeMatrix[ny][nx].walls & (1 << opposite((Direction) i)));
         
             if (wallHere || wallThere) {
                 // std::cout << "Skipping wall dir " << i << " from (" << x << "," << y << ") to (" << nx << "," << ny << ")\n";
@@ -428,6 +493,9 @@ void aStar()
 {
     ;
 }
+
+
+
 
 
 int main()
@@ -467,20 +535,63 @@ int main()
     // mouse.mazeMatrix[x0][y0] = cellConfig(mouse);
 
     // mouse.mazeMatrix[13][4] = {0,1,1,0,1};
-    for (int x = 5; x <= 10; ++x) {
-        setWall(mouse, x, 6, TOP);
+    // for (int x = 5; x <= 10; ++x) {
+    //     setWall(mouse, x, 6, TOP);
+    // }
+
+    while (true) {
+        scanWalls(mouse);
+        floodFill(mouse);
+
+        Direction minFloodFillDirection;
+        int minFloodFill = 255;
+
+        for (int i : range(len(DIRECTIONS))) {
+            int nx = mouse.cellPos.x + DIRECTIONS[i].x;
+            int ny = mouse.cellPos.y + DIRECTIONS[i].y;
+
+            if (nx < 0 || nx >= 16 || ny < 0 || ny >= 16)
+                continue;
+
+            bool wallHere = (mouse.mazeMatrix[mouse.cellPos.y][mouse.cellPos.x].walls & (1 << i));
+            bool wallThere = (mouse.mazeMatrix[ny][nx].walls & (1 << opposite((Direction) i)));
+        
+            if (wallHere) {
+                // std::cout << "Skipping wall here dir " << i << " from (" << mouse.cellPos.x << "," << mouse.cellPos.y << ") to (" << nx << "," << ny << ")\n";
+                continue;
+            }
+
+            if (wallThere) {
+                // std::cout << "Skipping wall there dir " << i << " from (" << mouse.cellPos.x << "," << mouse.cellPos.y << ") to (" << nx << "," << ny << ")\n";
+                continue;
+            }
+
+            if (mouse.floodMatrix[ny][nx] <= minFloodFill) {
+                minFloodFill = mouse.floodMatrix[ny][nx];
+                minFloodFillDirection = (Direction) i;
+            }
+        }
+
+        // std::cout << "Flood fill direction: " << minFloodFillDirection << std::endl;
+        // std::cout << "Flood fill value: " << minFloodFill << std::endl;
+
+        mouse.move(minFloodFillDirection);
     }
+
+
+
+
     
     // floodFill(mouse);
     // std::cout<<"hellohello"<<std::endl;
     // }
     // std::cin.get(); //uncomment if running exe
 
-    std::vector<std::string> path = stateMachine("FRFFLFRLS");
-    for (std::string item : path) {
-        std::cout<<item<<" ";
-    }
-    std::cout<<std::endl;
+    // std::vector<std::string> path = stateMachine("FRFFLFRLS");
+    // for (std::string item : path) {
+    //     std::cout<<item<<" ";
+    // }
+    // std::cout<<std::endl;
 
     //     std::vector<std::string> path = stateMachineGoated("FRFRLFLLRFRLS");
     //     for (std::string item : path) {

@@ -1,0 +1,1 @@
+clang++ SourceCode.cpp functions.cpp API.cpp -std=c++17
