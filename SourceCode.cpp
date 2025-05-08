@@ -5,12 +5,12 @@
 #include <vector>
 #include <queue>
 #include <stack>
-#include "functions.h"
 #include <chrono>
 #include <thread>
 #include <iomanip>
 #include <string>
 
+#include "functions.h"
 #include "range.h"
 
 // #include "pico/stdlib.h"
@@ -18,18 +18,15 @@
 // #include "pins.hpp"
 
 /////////////// DEFINITIONS /////////////////////
-// States
-#define START 0
-#define ORTHO 1
-#define ORTHO_L 2
-#define ORTHO_R 3
-#define ORTHO_LL 4
-#define ORTHO_RR 5
-#define DIAG_LR 6
-#define DIAG_RR 7
-#define DIAG_RL 8
-#define DIAG_LL 9
-#define STOP 10
+// Global States
+#define INIT 0
+#define IDLE 1
+#define MAP_FLOODFILL 2
+#define MAP_ASTAR 3
+#define MAP_CUSTOM 4
+
+// Mapping States
+
 
 ///////////////// CLASSES ///////////////////////
 
@@ -79,12 +76,14 @@ public:
     }
 };
 
+
 class Mouse
 {
 public:
     int cellX = 0, cellY = 0; // position in maze grid
     Point cellPos = {cellX, cellY};
-    int solvingType = 0; // 0 = floodfill, 1 = a*, 2 = custom
+    int state = IDLE;
+    int solvingType = 0; // 0 = floodfill, 1 = a*, 2 = custom  -  replace with states?
 
     std::vector<Point> adjacentCells;
 
@@ -156,7 +155,8 @@ bool contains(std::stack<Point> stack, const Point &target)
 }
 
 void turnPossible(Mouse mouse)
-{
+{   
+    ;
     /*if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 0)
     {
         mouse.turnLeft = true;
@@ -429,380 +429,32 @@ void aStar()
     ;
 }
 
-std::vector<std::string> stateMachine(const std::string &path)
-{
-    int n;
-    int state = START;
-    std::vector<std::string> output;
-
-    for (char c : path)
-    {
-        std::cout << c << " State: " << state << std::endl;
-        switch (state)
-        {
-        case START:
-            if (c == 'F')
-            {
-                n = 1;
-                state = ORTHO;
-            }
-            break;
-
-        case ORTHO:
-            if (c == 'F')
-            {
-                n++;
-            }
-            else if (c == 'L')
-            {
-                output.push_back("FWD" + std::to_string(n));
-                state = ORTHO_L;
-            }
-            else if (c == 'R')
-            {
-                output.push_back("FWD" + std::to_string(n));
-                state = ORTHO_R;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("FWD" + std::to_string(n));
-                output.push_back("STOP");
-            }
-            break;
-
-        case ORTHO_L:
-            if (c == 'F')
-            {
-                n = 2;
-                output.push_back("SS90EL");
-                state = ORTHO;
-            }
-            else if (c == 'L')
-            {
-                output.push_back("SS90EL");
-                output.push_back("FWD1");
-            }
-            else if (c == 'R')
-            {
-                output.push_back("SS90EL");
-                output.push_back("FWD1");
-                state = ORTHO_R;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("SS90EL");
-                output.push_back("FWD1");
-                output.push_back("STOP");
-            }
-            break;
-
-        case ORTHO_R:
-            if (c == 'F')
-            {
-                n = 2;
-                output.push_back("SS90ER");
-                state = ORTHO;
-            }
-            else if (c == 'L')
-            {
-                output.push_back("SS90ER");
-                output.push_back("FWD1");
-                state = ORTHO_L;
-            }
-            else if (c == 'R')
-            {
-                output.push_back("SS90ER");
-                output.push_back("FWD1");
-            }
-            else if (c == 'S')
-            {
-                output.push_back("SS90ER");
-                output.push_back("FWD1");
-                output.push_back("STOP");
-            }
-            break;
-        }
-    }
-
-    return output;
-}
-
-#define START 0
-#define ORTHO 1
-#define ORTHO_L 2
-#define ORTHO_R 3
-#define ORTHO_LL 4
-#define ORTHO_RR 5
-#define DIAG_LR 6
-#define DIAG_RR 7
-#define DIAG_RL 8
-#define DIAG_LL 9
-#define STOP 10
-
-std::vector<std::string> stateMachineGoated(const std::string &path)
-{
-    int n;
-    int state = START;
-    std::vector<std::string> output;
-
-    for (char c : path)
-    {
-        std::cout << c << " State: " << state << std::endl;
-        switch (state)
-        {
-        case START:
-            if (c == 'F')
-            {
-                n = 1;
-                state = ORTHO;
-            }
-            else if (c == 'S')
-            {
-                state = STOP;
-                output.push_back("STOP");
-            }
-            break;
-
-        case ORTHO:
-            if (c == 'F')
-            {
-                n++;
-            }
-            else if (c == 'L')
-            {
-                output.push_back("FWD" + std::to_string(n));
-                state = ORTHO_L;
-            }
-            else if (c == 'R')
-            {
-                output.push_back("FWD" + std::to_string(n));
-                state = ORTHO_R;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("FWD" + std::to_string(n));
-                output.push_back("STOP");
-                state = STOP;
-            }
-            break;
-
-        case ORTHO_L:
-            if (c == 'F')
-            {
-                output.push_back("SS90L");
-                n = 2;
-                state = ORTHO;
-            }
-            else if (c == 'L')
-            {
-                state = ORTHO_LL;
-            }
-            else if (c == 'R')
-            {
-                output.push_back("SD45L");
-                n = 2;
-                state = DIAG_LR;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("SS90EL");
-                output.push_back("FWD1");
-                output.push_back("STOP");
-                state = STOP;
-            }
-            break;
-
-        case ORTHO_R:
-            if (c == 'F')
-            {
-                output.push_back("SS90R");
-                n = 2;
-                state = ORTHO;
-            }
-            else if (c == 'L')
-            {
-                output.push_back("SD45R");
-                n = 2;
-                state = DIAG_RL;
-            }
-            else if (c == 'R')
-            {
-                state = ORTHO_RR;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("SS90ER");
-                output.push_back("FWD1");
-                output.push_back("STOP");
-                state = STOP;
-            }
-            break;
-
-        case ORTHO_LL:
-            if (c == 'F')
-            {
-                output.push_back("SS180L");
-                n = 2;
-                state = ORTHO;
-            }
-            else if (c == 'R')
-            {
-                output.push_back("SD135L");
-                n = 2;
-                state = DIAG_LR;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("SS180L");
-                output.push_back("FWD1");
-                output.push_back("STOP");
-                state = STOP;
-            }
-            break;
-
-        case ORTHO_RR:
-            if (c == 'F')
-            {
-                output.push_back("SS180R");
-                n = 2;
-                state = ORTHO;
-            }
-            else if (c == 'L')
-            {
-                output.push_back("SD135R");
-                n = 2;
-                state = DIAG_RL;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("SS180R");
-                output.push_back("FWD1");
-                output.push_back("STOP");
-                state = STOP;
-            }
-            break;
-
-        case DIAG_LR:
-            if (c == 'F')
-            {
-                output.push_back("DIA" + std::to_string(n));
-                output.push_back("DS45R");
-                n = 2;
-                state = ORTHO;
-            }
-            else if (c == 'L')
-            {
-                n++;
-            }
-            else if (c == 'R')
-            {
-                state = DIAG_RR;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("DIA" + std::to_string(n));
-                output.push_back("DS45R");
-                output.push_back("STOP");
-                state = STOP;
-            }
-            break;
-
-        case DIAG_RR:
-            if (c == 'F')
-            {
-                output.push_back("DIA" + std::to_string(n));
-                output.push_back("DD90R");
-                n = 2;
-                state = ORTHO;
-            }
-            else if (c == 'L')
-            {
-                output.push_back("DIA" + std::to_string(n));
-                output.push_back("DD90R");
-                n = 2;
-                state = DIAG_RL;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("DIA" + std::to_string(n));
-                output.push_back("DS135R");
-                output.push_back("FWD1");
-                output.push_back("STOP");
-                state = STOP;
-            }
-            break;
-
-        case DIAG_RL:
-            if (c == 'F')
-            {
-                output.push_back("DIA" + std::to_string(n));
-                output.push_back("DS45L");
-                n = 2;
-                state = ORTHO;
-            }
-            else if (c == 'L')
-            {
-                state = DIAG_LL;
-            }
-            else if (c == 'R')
-            {
-                n++;
-                state = DIAG_LR;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("DIA" + std::to_string(n));
-                output.push_back("DS45L");
-                output.push_back("FWD1");
-                output.push_back("STOP");
-                state = STOP;
-            }
-            break;
-
-        case DIAG_LL:
-            if (c == 'F')
-            {
-                output.push_back("DIA" + std::to_string(n));
-                output.push_back("DS135L");
-                n = 2;
-                state = ORTHO;
-            }
-            else if (c == 'R')
-            {
-                output.push_back("DIA" + std::to_string(n));
-                output.push_back("DD90L");
-                n = 2;
-                state = DIAG_LR;
-            }
-            else if (c == 'S')
-            {
-                output.push_back("DIA" + std::to_string(n));
-                output.push_back("DS135L");
-                output.push_back("FWD1");
-                output.push_back("STOP");
-                state = STOP;
-            }
-            break;
-
-        case STOP:
-            break;
-        }
-    }
-
-    return output;
-}
 
 int main()
 {
     // Initialize mouse
     Mouse mouse;
-    // for (int i = 0; i < 27; i++){
-    //     // gpio_init(allPins[i]);
-    //     // gpio_set_dir(allPins[i], GPIO_OUT);
-    //     ;
-    // }
+    
 
-    // stdio_init_all();
+    // Global State Machine
+    switch (mouse.state) {
+        case INIT:
+            // stdio_init_all();
+            // for (int i = 0; i < 27; i++){
+            //     gpio_init(allPins[i]);
+            //     gpio_set_dir(allPins[i], GPIO_OUT);
+            // }
+            break;
+
+        case IDLE:
+            // Wait for button input
+            break;
+
+        case MAP_FLOODFILL:
+            break;
+
+    }
+
 
     // main loop
     // gpio_put(ledPin, 1);
@@ -819,16 +471,16 @@ int main()
         setWall(mouse, x, 6, TOP);
     }
     
-    floodFill(mouse);
+    // floodFill(mouse);
     // std::cout<<"hellohello"<<std::endl;
     // }
     // std::cin.get(); //uncomment if running exe
 
-    // std::vector<std::string> path = stateMachine("FRFFLFRLS");
-    // for (std::string item : path) {
-    //     std::cout<<item<<" ";
-    // }
-    // std::cout<<std::endl;
+    std::vector<std::string> path = stateMachine("FRFFLFRLS");
+    for (std::string item : path) {
+        std::cout<<item<<" ";
+    }
+    std::cout<<std::endl;
 
     //     std::vector<std::string> path = stateMachineGoated("FRFRLFLLRFRLS");
     //     for (std::string item : path) {
