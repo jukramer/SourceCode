@@ -1,0 +1,1 @@
+cl Sourcecode.cpp functions.cpp  /EHsc /DEBUG /Z7

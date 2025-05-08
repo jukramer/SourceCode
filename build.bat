@@ -1,0 +1,1 @@
+cl /O2 /GL /DNDEBUG /EHsc Sourcecode.cpp functions.cpp /link /LTCG
