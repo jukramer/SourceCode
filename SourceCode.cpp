@@ -41,6 +41,12 @@ struct Point
     int y = 0;
 };
 
+bool operator==(Point p1, Point p2)
+{
+    return p1.x == p2.x && p1.y == p2.y;
+}
+bool operator!=(Point p1, Point p2) { return !(p1 == p2); }
+
 struct Cell {
     union {
         struct {
@@ -53,12 +59,11 @@ struct Cell {
     };
 };
 
-bool operator==(Point p1, Point p2)
-{
-    return p1.x == p2.x && p1.y == p2.y;
-}
+enum Direction { TOP = 0, RIGHT = 1, BOTTOM = 2, LEFT = 3 };
 
-bool operator!=(Point p1, Point p2) { return !(p1 == p2); }
+int opposite(int dir) {
+    return (dir + 2) % 4;
+}
 
 class Node
 {
@@ -234,7 +239,7 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
         {
             for (int j = 0; i < MAZE_SIZE; j++)
             {
-                //if (mouse.mazeMatrix[i][j]. == 0) //TODO XXXXXXXXXX
+                //if (mouse.mazeMatrix[i][j][4] == 0) //TODO XXXXXXXXXX
                 {
                     uncheckedCells += 1;
                 }
@@ -332,13 +337,7 @@ void printFloodfill(Mouse &mouse)
     }
 }
 
-int opposite(int dir) {
-    return (dir + 2) % 4;
-}
-
-enum Direction { TOP = 0, RIGHT = 1, BOTTOM = 2, LEFT = 3 };
-
-void setWall(Mouse &mouse, int x, int y, int dir) {
+void setWall(Mouse &mouse, int x, int y, Direction dir) {
     auto &maze = mouse.mazeMatrix;
 
     maze[y][x].walls |= (1 << dir);
@@ -370,25 +369,27 @@ void floodFill(Mouse &mouse)
         }
     }
 
-    std::queue<Point> floodQueue;
+    std::vector<Point> floodQueue;
+    floodQueue.reserve(256);
+
     mouse.floodMatrix[7][7] = 0;  // Distance to center is 0
     mouse.floodMatrix[7][8] = 0;
     mouse.floodMatrix[8][7] = 0;
     mouse.floodMatrix[8][8] = 0;
 
     // Add goal cells to queue
-    floodQueue.push({7, 7});
-    floodQueue.push({7, 8});
-    floodQueue.push({8, 7});
-    floodQueue.push({8, 8});
+    floodQueue.insert(floodQueue.begin(), {7, 7});
+    floodQueue.insert(floodQueue.begin(), {7, 8});
+    floodQueue.insert(floodQueue.begin(), {8, 7});
+    floodQueue.insert(floodQueue.begin(), {8, 8});
 
     // Note: Must be in the same order as the bit fields in Cell!
     const Point directions[4] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
     
     int c = 0; // Cell counter
     while (!floodQueue.empty()) {
-        Point current = floodQueue.front();
-        floodQueue.pop();
+        Point current = floodQueue.back();
+        floodQueue.pop_back();
         c++;
 
         int x = current.x, y = current.y;
@@ -411,7 +412,7 @@ void floodFill(Mouse &mouse)
 
             if (mouse.floodMatrix[ny][nx] > dist + 1) {
                 mouse.floodMatrix[ny][nx] = dist + 1;
-                floodQueue.push({nx, ny});
+                floodQueue.insert(floodQueue.begin(), {nx, ny});
             }
         }
     }
