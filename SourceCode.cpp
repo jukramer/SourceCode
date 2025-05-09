@@ -70,11 +70,28 @@ struct Cell
             uint8_t rightWall : 1;  // 1 bit for the right wall
             uint8_t bottomWall : 1; // 1 bit for the bottom wall
             uint8_t leftWall : 1;   // 1 bit for the left wall
+            uint8_t visited: 1;     // 1 bit for visited status
         };
         uint8_t walls; // 8 bits, for easy manipulation of all walls together
     };
-    bool visited = false;
 };
+
+// Ring buffer queue for flood fill
+struct Queue {
+    Point buffer[256];
+    uint8_t head = 0, tail = 0;
+
+    inline bool empty() const { return head == tail; }
+    inline void push(Point p) { buffer[head++ & 255] = p; }
+    inline Point pop() { return buffer[tail++ & 255]; }
+};
+
+#define SKIP_BOUNDS_AND_WALLS(x, y, nx, ny) if (nx < 0 || nx >= 16 || ny < 0 || ny >= 16) continue; \
+    bool wallHere = (mazeMatrix[y][x].walls & (1 << i)); \
+    if (wallHere) continue; \
+    \
+    bool wallThere = (mazeMatrix[ny][nx].walls & (1 << OPPOSITE[i])); \
+    if (wallThere) continue; \
 
 enum Direction
 {
@@ -84,84 +101,16 @@ enum Direction
     LEFT = 3
 };
 
-char directionToChar(Direction dir)
-{
-    switch (dir)
-    {
-    case TOP:
-        return 'n';
-    case RIGHT:
-        return 'e';
-    case BOTTOM:
-        return 's';
-    case LEFT:
-        return 'w';
-    default:
-        return '?';
-    }
-}
-
-Direction opposite(Direction dir)
-{
-    return (Direction)(((int)dir + 2) % 4);
-}
-
-Direction rotate_direction_left(Direction dir)
-{
-    if (dir == TOP)
-    {
-        return LEFT;
-    }
-    else if (dir == LEFT)
-    {
-        return BOTTOM;
-    }
-    else if (dir == BOTTOM)
-    {
-        return RIGHT;
-    }
-    else
-    {
-        return TOP;
-    }
-}
-
-Direction rotate_direction_right(Direction dir)
-{
-    if (dir == TOP)
-    {
-        return RIGHT;
-    }
-    else if (dir == RIGHT)
-    {
-        return BOTTOM;
-    }
-    else if (dir == BOTTOM)
-    {
-        return LEFT;
-    }
-    else
-    {
-        return TOP;
-    }
-}
+const Direction OPPOSITE[4] = {BOTTOM, LEFT, TOP, RIGHT}; 
+const Direction ROTATE_LEFT[4] = {LEFT, TOP, RIGHT, BOTTOM};
+const Direction ROTATE_RIGHT[4] = {RIGHT, BOTTOM, LEFT, TOP};
+const char DIRECTION_CHAR[4] = {'n', 'e', 's', 'w'};
 
 // Note: Must be in the same order as the bit fields in Cell!
 const Point DIRECTIONS[4] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 
-class Node
-{
-public:
-    double g, h;            // A* values
-    std::vector<float> pos; // position vector: <x,y>
-
-    Node(std::vector<float> position, double g, double h)
-    {
-        std::vector<float> pos = position;
-        g = g;
-        h = h;
-    }
-};
+Cell mazeMatrix[MAZE_SIZE][MAZE_SIZE] = {}; // Init to empty with = {};
+int floodMatrix[MAZE_SIZE][MAZE_SIZE] = {};
 
 class Mouse
 {
@@ -180,12 +129,6 @@ public:
 
     int phase = 0; // 0: mapping phase   1: pathfinding phase   2: solving phase
 
-    // Maze map in matrix
-    Cell mazeMatrix[MAZE_SIZE][MAZE_SIZE] = {}; // Init to empty with = {};
-
-    // Flood matrix
-    int floodMatrix[MAZE_SIZE][MAZE_SIZE] = {};
-
     Mouse()
     {
         mazeMatrix[cellPos.y][cellPos.x].visited = true; // Mark starting cell as visited
@@ -194,13 +137,13 @@ public:
     void turnLeft()
     {
         API::turnLeft();
-        orientation = rotate_direction_left(orientation);
+        orientation = ROTATE_LEFT[orientation];
     }
 
     void turnRight()
     {
         API::turnRight();
-        orientation = rotate_direction_right(orientation);
+        orientation = ROTATE_RIGHT[orientation];
     }
 
     void move(Direction targetDir)
@@ -262,29 +205,29 @@ bool contains(std::stack<Point> stack, const Point &target)
 void turnPossible(Mouse mouse)
 {
     ;
-    /*if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 0)
+    /*if (mazeMatrix[mouse.cellX][mouse.cellY][0] == 0)
     {
         mouse.turnLeft = true;
     }
-    else if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 1)
+    else if (mazeMatrix[mouse.cellX][mouse.cellY][0] == 1)
     {
         mouse.turnLeft = false;
     }
 
-    if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 0)
+    if (mazeMatrix[mouse.cellX][mouse.cellY][0] == 0)
     {
         mouse.turnLeft = true;
     }
-    else if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 1)
+    else if (mazeMatrix[mouse.cellX][mouse.cellY][0] == 1)
     {
         mouse.turnLeft = false;
     }
 
-    if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 0)
+    if (mazeMatrix[mouse.cellX][mouse.cellY][0] == 0)
     {
         mouse.turnLeft = true;
     }
-    else if (mouse.mazeMatrix[mouse.cellX][mouse.cellY][0] == 1)
+    else if (mazeMatrix[mouse.cellX][mouse.cellY][0] == 1)
     {
         mouse.turnLeft = false;
     }*/
@@ -302,7 +245,7 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
                 mouse.cellPath.push({mouse.cellX, mouse.cellY});
             }
 
-            // mouse.mazeMatrix[mouse.cellX-1][mouse.cellY-1] = cellConfig(mouse); // assign cell vector to each matrix cell
+            // mazeMatrix[mouse.cellX-1][mouse.cellY-1] = cellConfig(mouse); // assign cell vector to each matrix cell
 
             // Find adjacent cells to mouse
             std::vector<Point> adjacentCells;
@@ -344,7 +287,7 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
             {
                 for (int j = 0; i < MAZE_SIZE; j++)
                 {
-                    //if (mouse.mazeMatrix[i][j][4] == 0) //TODO XXXXXXXXXX
+                    //if (mazeMatrix[i][j][4] == 0) //TODO XXXXXXXXXX
                     {
                         uncheckedCells += 1;
                     }
@@ -358,37 +301,9 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
         }*/
 }
 
-std::vector<Point> getNeighbors(const Point &cell)
-{
-    std::vector<Point> neighbors;
-
-    // Order: Up, Right, Down, Left
-    int dx[4] = {0, 1, 0, -1};
-    int dy[4] = {-1, 0, 1, 0};
-
-    for (int i = 0; i < 4; ++i)
-    {
-        int nx = cell.x + dx[i];
-        int ny = cell.y + dy[i];
-        if (nx >= 0 && nx < 16 && ny >= 0 && ny < 16)
-        {
-            neighbors.push_back({nx, ny});
-        }
-        else
-        {
-            // Push an invalid point or a placeholder
-            neighbors.push_back({-1, -1});
-        }
-    }
-
-    return neighbors;
-}
-
 void printMaze(Mouse &mouse)
 {
     const int N = 16;
-
-    auto &maze = mouse.mazeMatrix;
 
     for (int y = 0; y < N; y++)
     {
@@ -396,7 +311,7 @@ void printMaze(Mouse &mouse)
         for (int x = 0; x < N; x++)
         {
             std::cout << " ";
-            if (maze[y][x].topWall)
+            if (mazeMatrix[y][x].topWall)
                 std::cout << "---";
             else
                 std::cout << "   ";
@@ -406,16 +321,16 @@ void printMaze(Mouse &mouse)
         // Side walls + spaces
         for (int x = 0; x < N; x++)
         {
-            if (maze[y][x].leftWall)
+            if (mazeMatrix[y][x].leftWall)
                 std::cout << "|";
             else
                 std::cout << " ";
 
-            std::cout << std::setw(3) << mouse.floodMatrix[y][x];
+            std::cout << std::setw(3) << floodMatrix[y][x];
         }
 
         // Right wall of the last cell
-        if (maze[y][N - 1].rightWall)
+        if (mazeMatrix[y][N - 1].rightWall)
             std::cout << "|\n";
         else
             std::cout << " \n";
@@ -425,7 +340,7 @@ void printMaze(Mouse &mouse)
     for (int x = 0; x < N; x++)
     {
         std::cout << " ";
-        if (maze[N - 1][x].bottomWall)
+        if (mazeMatrix[N - 1][x].bottomWall)
             std::cout << "---";
         else
             std::cout << "   ";
@@ -440,7 +355,7 @@ void printFloodfill(Mouse &mouse)
     {
         for (int j : range(MAZE_SIZE))
         {
-            std::cout << std::setw(4) << mouse.floodMatrix[i][j] << " ";
+            std::cout << std::setw(4) << floodMatrix[i][j] << " ";
         }
         std::cout << std::endl;
     }
@@ -448,9 +363,7 @@ void printFloodfill(Mouse &mouse)
 
 void setWall(Mouse &mouse, int x, int y, Direction dir)
 {
-    auto &maze = mouse.mazeMatrix;
-
-    maze[y][x].walls |= (1 << dir);
+    mazeMatrix[y][x].walls |= (1 << dir);
 
     int dx = 0, dy = 0;
     switch (dir)
@@ -474,10 +387,10 @@ void setWall(Mouse &mouse, int x, int y, Direction dir)
 
     if (nx >= 0 && nx < 16 && ny >= 0 && ny < 16)
     {
-        maze[ny][nx].walls |= (1 << opposite(dir));
+        mazeMatrix[ny][nx].walls |= (1 << OPPOSITE[dir]);
     }
 
-    API::setWall(x, MAZE_SIZE - y - 1, directionToChar(dir));
+    API::setWall(x, MAZE_SIZE - y - 1, DIRECTION_CHAR[dir]);
 }
 
 void scanWalls(Mouse &mouse)
@@ -488,11 +401,11 @@ void scanWalls(Mouse &mouse)
     }
     if (API::wallLeft())
     {
-        setWall(mouse, mouse.cellPos.x, mouse.cellPos.y, rotate_direction_left(mouse.orientation));
+        setWall(mouse, mouse.cellPos.x, mouse.cellPos.y, ROTATE_LEFT[mouse.orientation]);
     }
     if (API::wallRight())
     {
-        setWall(mouse, mouse.cellPos.x, mouse.cellPos.y, rotate_direction_right(mouse.orientation));
+        setWall(mouse, mouse.cellPos.x, mouse.cellPos.y, ROTATE_RIGHT[mouse.orientation]);
     }
 }
 
@@ -505,56 +418,46 @@ void floodFill(Mouse &mouse)
     {
         for (int j : range(MAZE_SIZE))
         {
-            mouse.floodMatrix[i][j] = 255; // High initial value
+            floodMatrix[i][j] = 255; // High initial value
         }
     }
 
-    std::vector<Point> floodQueue;
-    floodQueue.reserve(256);
-
+    Queue floodQueue;
     if (mouse.state == MAP_FLOODFILL)
     {
-        mouse.floodMatrix[7][7] = 0; // Distance to center is 0
-        mouse.floodMatrix[7][8] = 0;
-        mouse.floodMatrix[8][7] = 0;
-        mouse.floodMatrix[8][8] = 0;
+        floodMatrix[7][7] = 0; // Distance to center is 0
+        floodMatrix[7][8] = 0;
+        floodMatrix[8][7] = 0;
+        floodMatrix[8][8] = 0;
 
         // Add goal cells to queue
-        floodQueue.insert(floodQueue.begin(), {7, 7});
-        floodQueue.insert(floodQueue.begin(), {7, 8});
-        floodQueue.insert(floodQueue.begin(), {8, 7});
-        floodQueue.insert(floodQueue.begin(), {8, 8});
+        floodQueue.push({7, 7});
+        floodQueue.push({7, 8});
+        floodQueue.push({8, 7});
+        floodQueue.push({8, 8});
     }
     else if (mouse.state == MAP_FLOODFILL_BACK)
     {
-        mouse.floodMatrix[MAZE_SIZE - 1][0] = 0; // Cost to start is 0
-        floodQueue.insert(floodQueue.begin(), {0, MAZE_SIZE - 1});
+        floodMatrix[MAZE_SIZE - 1][0] = 0; // Cost to start is 0
+        floodQueue.push({0, MAZE_SIZE - 1});
 
         for (int x : range(MAZE_SIZE))
         {
             for (int y : range(MAZE_SIZE))
             {
-                Cell &cell = mouse.mazeMatrix[y][x];
+                Cell &cell = mazeMatrix[y][x];
                 if (!cell.visited) continue; // Only consider known cells
                 
                 for (int i : range(len(DIRECTIONS))) {
                     int nx = x + DIRECTIONS[i].x;
                     int ny = y + DIRECTIONS[i].y;
+                    SKIP_BOUNDS_AND_WALLS(x, y, nx, ny);
 
-                    if (nx < 0 || nx >= 16 || ny < 0 || ny >= 16)
-                        continue;
-
-                    bool wallHere = (mouse.mazeMatrix[y][x].walls & (1 << i));
-                    bool wallThere = (mouse.mazeMatrix[ny][nx].walls & (1 << opposite((Direction)i)));
-
-                    if (wallHere || wallThere)
-                        continue;
-
-                    Cell &neighbor = mouse.mazeMatrix[ny][nx];
+                    Cell &neighbor = mazeMatrix[ny][nx];
                     if (!neighbor.visited)
                     {
-                        mouse.floodMatrix[ny][nx] = 10;
-                        floodQueue.insert(floodQueue.begin(), {nx, ny});
+                        floodMatrix[ny][nx] = 10;
+                        floodQueue.push({nx, ny});
                     }
                 }
             }
@@ -564,34 +467,22 @@ void floodFill(Mouse &mouse)
     int c = 0; // Cell counter
     while (!floodQueue.empty())
     {
-        Point current = floodQueue.back();
-        floodQueue.pop_back();
+        Point current = floodQueue.pop();
         c++;
 
         int x = current.x, y = current.y;
-        int dist = mouse.floodMatrix[y][x];
+        int dist = floodMatrix[y][x];
 
         for (int i : range(len(DIRECTIONS)))
         {
             int nx = x + DIRECTIONS[i].x;
             int ny = y + DIRECTIONS[i].y;
+            SKIP_BOUNDS_AND_WALLS(x, y, nx, ny);
 
-            if (nx < 0 || nx >= 16 || ny < 0 || ny >= 16)
-                continue;
-
-            bool wallHere = (mouse.mazeMatrix[y][x].walls & (1 << i));
-            bool wallThere = (mouse.mazeMatrix[ny][nx].walls & (1 << opposite((Direction)i)));
-
-            if (wallHere || wallThere)
+            if (floodMatrix[ny][nx] > dist + 1)
             {
-                // std::cout << "Skipping wall dir " << i << " from (" << x << "," << y << ") to (" << nx << "," << ny << ")\n";
-                continue;
-            }
-
-            if (mouse.floodMatrix[ny][nx] > dist + 1)
-            {
-                mouse.floodMatrix[ny][nx] = dist + 1;
-                floodQueue.insert(floodQueue.begin(), {nx, ny});
+                floodMatrix[ny][nx] = dist + 1;
+                floodQueue.push({nx, ny});
             }
         }
     }
@@ -610,6 +501,9 @@ void aStar()
 
 int main()
 {
+    std::ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
+
     // Initialize mouse
     Mouse mouse;
 
@@ -641,28 +535,11 @@ int main()
             {
                 int nx = mouse.cellPos.x + DIRECTIONS[i].x;
                 int ny = mouse.cellPos.y + DIRECTIONS[i].y;
+                SKIP_BOUNDS_AND_WALLS(mouse.cellPos.x, mouse.cellPos.y, nx, ny);
 
-                if (nx < 0 || nx >= 16 || ny < 0 || ny >= 16)
-                    continue;
-
-                bool wallHere = (mouse.mazeMatrix[mouse.cellPos.y][mouse.cellPos.x].walls & (1 << i));
-                bool wallThere = (mouse.mazeMatrix[ny][nx].walls & (1 << opposite((Direction)i)));
-
-                if (wallHere)
+                if (floodMatrix[ny][nx] <= minFloodFill)
                 {
-                    // std::cout << "Skipping wall here dir " << i << " from (" << mouse.cellPos.x << "," << mouse.cellPos.y << ") to (" << nx << "," << ny << ")\n";
-                    continue;
-                }
-
-                if (wallThere)
-                {
-                    // std::cout << "Skipping wall there dir " << i << " from (" << mouse.cellPos.x << "," << mouse.cellPos.y << ") to (" << nx << "," << ny << ")\n";
-                    continue;
-                }
-
-                if (mouse.floodMatrix[ny][nx] <= minFloodFill)
-                {
-                    minFloodFill = mouse.floodMatrix[ny][nx];
+                    minFloodFill = floodMatrix[ny][nx];
                     minFloodFillDirection = (Direction)i;
                 }
             }
@@ -672,7 +549,7 @@ int main()
 
             mouse.move(minFloodFillDirection);
 
-            if (mouse.floodMatrix[mouse.cellPos.y][mouse.cellPos.x] == 0)
+            if (floodMatrix[mouse.cellPos.y][mouse.cellPos.x] == 0)
             {
                 if (mouse.state == MAP_FLOODFILL)
                 {
@@ -698,9 +575,9 @@ int main()
 
     //     int x0 = mouse.cellPos[0];
     //     int y0 = mouse.cellPos[1];
-    // mouse.mazeMatrix[x0][y0] = cellConfig(mouse);
+    // mazeMatrix[x0][y0] = cellConfig(mouse);
 
-    // mouse.mazeMatrix[13][4] = {0,1,1,0,1};
+    // mazeMatrix[13][4] = {0,1,1,0,1};
     // for (int x = 5; x <= 10; ++x) {
     //     setWall(mouse, x, 6, TOP);
     // }
