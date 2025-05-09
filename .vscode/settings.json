@@ -43,6 +43,9 @@
         "scminput": false
     },
     "files.associations": {
+        "*.page-template": "vue",
+        "*.layout-template": "vue",
+        "*.vue": "vue",
         "array": "cpp",
         "atomic": "cpp",
         "bit": "cpp",
@@ -106,6 +109,22 @@
         "ratio": "cpp",
         "semaphore": "cpp",
         "stop_token": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "__locale": "cpp",
+        "__verbose_abort": "cpp",
+        "bitset": "cpp",
+        "ios": "cpp",
+        "locale": "cpp",
+        "mutex": "cpp",
+        "print": "cpp",
+        "__bit_reference": "cpp",
+        "__hash_table": "cpp",
+        "__node_handle": "cpp",
+        "__split_buffer": "cpp",
+        "complex": "cpp",
+        "execution": "cpp",
+        "forward_list": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
     }
 }

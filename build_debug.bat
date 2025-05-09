@@ -1,1 +1,1 @@
-cl Sourcecode.cpp functions.cpp API.cpp /EHsc /DEBUG /Z7
+cl Sourcecode.cpp functions.cpp API.cpp /EHsc /DEBUG /Z7 /std:c++20

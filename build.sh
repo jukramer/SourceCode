@@ -1,1 +1,1 @@
-clang++ SourceCode.cpp functions.cpp API.cpp -std=c++17
+clang++ SourceCode.cpp functions.cpp API.cpp -std=c++20
