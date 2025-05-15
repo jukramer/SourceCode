@@ -82,6 +82,9 @@ class Mouse
 public:
     int cellX = 0, cellY = 0; // position in maze grid
     Point cellPos = {cellX, cellY};
+
+    float posX = 0, posY = 0.0f; //Actual position in mm
+
     int state = IDLE;
     int solvingType = 0; // 0 = floodfill, 1 = a*, 2 = custom  -  replace with states?
 
@@ -103,6 +106,8 @@ public:
     bool turnLeft = false, turnRight = false, goStraight = false; // variables that determine if specific movements are possible
     std::vector<bool> possMovements = {turnLeft, turnRight, goStraight};
 
+    const float tileSizeMM = 180.0f; //
+
     // Flood matrix
     int floodMatrix[MAZE_SIZE][MAZE_SIZE] = {};
 
@@ -113,12 +118,65 @@ public:
 
 ////////////////// FUNCTIONS ////////////////////
 
+// Function still unused, include in main later as mouse.updatePosition(distance_moved_since_last_check);
+void updatePosition(float distance_mm) {
+    // Move depending on orientation
+    if (orientation == 0) {       // Facing UP
+        posY += distance_mm;
+    } else if (orientation == 1) { // RIGHT
+        posX += distance_mm;
+    } else if (orientation == 2) { // DOWN
+        posY -= distance_mm;
+    } else if (orientation == 3) { // LEFT
+        posX -= distance_mm;
+    }
+    updateTile()
+}
+
+    updateTile(); // Check if we entered a new tile
+}
+
+void updateTile() {
+    int newCellX = static_cast<int>(posX / tileSizeMM);
+    int newCellY = static_cast<int>(posY / tileSizeMM);
+
+    if (newCellX != cellX || newCellY != cellY) {
+        cellX = newCellX;
+        cellY = newCellY;
+        cellPos = {cellX, cellY};
+        posChanged = true;
+        visitedCells.push(cellPos); // Mark this cell as visited
+    } else {
+        posChanged = false;
+    }
+}
+
+void initSensors() {
+    frontSensor.init();
+    leftSensor.init();
+    rightSensor.init();
+    diagLeftSensor.init();
+    diagRightSensor.init();
+    imu.init();
+}
+
+void read_imu() {
+    float ax, ay, az;
+    float gx, gy, gz;
+    imu.readAccel(&ax, &ay, &az);
+    imu.readGyro(&gx, &gy, &gz);
+}
+
+
 std::vector<int> cellConfig(Mouse mouse)
 {
-    // assign dl, dr, and df via tof sensors later!
-
-    double dl =0, dr =0, df =0; // distance values for front, left, and right
-    double tl =0, tr =0, tf =0; // threshold values for front, left, and right
+    //Read ToFs
+    double dl = leftSensor.readRange(), dr =rightSensor.readRange(), df =frontSensor.readRange();
+    double dDl = diagLeftSensor.readRange(), dDr = diagRightSensor.readRange();
+    
+    
+    // distance values for front, left, and right
+    const double tl =0, tr =0, tf =0; // threshold values for front, left, and right
     std::vector<double> dVec = {dl, df, dr};
     std::vector<double> tVec = {tl, tf, tr};
     std::vector<int> cellVec = {0, 0, 0, 0}; // left, top, right, bottom, checked (y/n). 1=wall, 0=no wall
@@ -233,11 +291,11 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
     // Check if all cells have been mapped
     int uncheckedCells = 0;
 
-    while (int checkedCells = 0)
+    while (int checkedCells == 0)
     {
         for (int i = 0; i < MAZE_SIZE; i++)
         {
-            for (int j = 0; i < MAZE_SIZE; j++)
+            for (int j = 0; j < MAZE_SIZE; j++)
             {
                 //if (mouse.mazeMatrix[i][j][4] == 0) //TODO XXXXXXXXXX
                 {
@@ -247,7 +305,7 @@ void mapping(Mouse mouse) // handle overall movement of the mouse
         }
     }
 
-    if (uncheckedCells = 0)
+    if (uncheckedCells == 0)
     {
         mouse.phase = 1;
     }
@@ -455,6 +513,7 @@ int main()
 
     }
 
+    initSensors();
 
     // main loop
     // gpio_put(ledPin, 1);
