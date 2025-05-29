@@ -22,12 +22,13 @@
 // Global States
 #define INIT 0
 #define IDLE 1
+
 #define MAP_FLOODFILL 2
+#define MAP_FLOODFILL_BACK 3
 
-#define MAP_ASTAR 3
-#define MAP_CUSTOM 4
+#define FIND_PATH 4
 
-#define MAP_FLOODFILL_BACK 5
+#define FAST_RUN 5
 
 // Mapping States
 
@@ -167,35 +168,88 @@ void printMaze()
         else
             std::cout << "   ";
     }
-    std::cout << " \n";
 }
 
-void setWall(int x, int y, Direction dir)
+
+// Note: Must be in the same order as the bit fields in Cell!
+const Point DIRECTIONS[4] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+
+
+class VController
 {
-    mazeMatrix[y][x].walls |= (1 << dir);
-    moveMask[y][x] &= ~(1 << dir);
+    public: 
+        double ePrev = 0;
+        double eTot = 0;
 
-    int nx = x + DIRECTIONS[dir].x;
-    int ny = y + DIRECTIONS[dir].y;
+        double Kp;
+        double Ki;
+        double Kd;
 
-    if (nx >= 0 && nx < 16 && ny >= 0 && ny < 16)
-    {
-        mazeMatrix[ny][nx].walls |= (1 << OPPOSITE[dir]);
-        moveMask[ny][nx] &= ~(1 << OPPOSITE[dir]);
+        // int tPrev;
+        // std::chrono::time_point<std::chrono::steady_clock> tPrev;
+        int64_t tPrev;
+
+    VController(double Kp, double Ki, double Kd) {
+        Kp = Kp;
+        Ki = Ki;
+        Kd = Kd;
+
+        // tPrev = to_us_since_boot(absolute_time_t());
+        tPrev = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+
     }
+    
+    double output(double vRef, double vCurrent) {
+        double e = vRef - vCurrent;
+        // int t = to_us_since_boot(absolute_time_t());
+        int64_t t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
-    API::setWall(x, 15 - y, DIRECTION_CHAR[dir]);
-}
+        int64_t dt = (t - tPrev)/1000000;
 
-// Global States
-#define INIT 0
-#define IDLE 1
-#define MAP_FLOODFILL 2
+        eTot += e*dt;
+        
+        return Kp*e + Ki*eTot + Kd*(e-ePrev)/dt;
+    }
+};
 
-#define MAP_ASTAR 3
-#define MAP_CUSTOM 4
 
-#define MAP_FLOODFILL_BACK 5
+class WController
+{
+    public: 
+        double ePrev = 0;
+        double eTot = 0;
+
+        double Kp;
+        double Ki;
+        double Kd;
+
+        // int tPrev;
+        // std::chrono::time_point<std::chrono::steady_clock> tPrev;
+        int64_t tPrev;
+
+    WController(double Kp, double Ki, double Kd) {
+        Kp = Kp;
+        Ki = Ki;
+        Kd = Kd;
+
+        // tPrev = to_us_since_boot(absolute_time_t());
+        tPrev = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+
+    }
+    
+    double output(double wRef, double wCurrent) {
+        double e = wRef - wCurrent;
+        // int t = to_us_since_boot(absolute_time_t());
+        int64_t t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+
+        int64_t dt = (t - tPrev)/1000000;
+
+        eTot += e*dt;
+        
+        return Kp*e + Ki*eTot + Kd*(e-ePrev)/dt;
+    }
+};
+
 
 class Mouse
 {
@@ -205,6 +259,13 @@ public:
 
     int state = IDLE;
     int solvingType = 0; // 0 = floodfill, 1 = a*, 2 = custom  -  replace with states?
+    bool buttonPressed = false;
+
+    std::vector<Point> adjacentCells;
+    Point targetCell = {0, 0};
+
+    bool posChanged = false; // true if the cell position of the mouse has changed
+    std::stack<Point> cellPath;
 
     int phase = 0; // 0: mapping phase   1: pathfinding phase   2: solving phase
 
@@ -288,8 +349,7 @@ void floodFill(Mouse &mouse)
         floodQueue.push({8, 7});
         floodQueue.push({8, 8});
     }
-    else if (mouse.state == MAP_FLOODFILL_BACK)
-    {
+    else if (mouse.state == MAP_FLOODFILL_BACK) {
         setDist(0, MAZE_SIZE - 1, 0); // Start from bottom left corner
         floodQueue.push({0, MAZE_SIZE - 1});
 
@@ -313,7 +373,8 @@ void floodFill(Mouse &mouse)
     int c = 0; // Cell counter
     while (!floodQueue.empty())
     {
-        Point current = floodQueue.pop();
+        Point current = floodQueue.back();
+        floodQueue.pop_back();
         c++;
 
         int x = current.x, y = current.y;
@@ -380,10 +441,9 @@ int main()
     Mouse mouse;
 
     // Global State Machine
-    while (true)
-    {
-        if (mouse.state == INIT)
-        {
+    
+    while (true) {
+        if (mouse.state == INIT) {
             // stdio_init_all();
             // for (int i = 0; i < 27; i++){
             //     gpio_init(allPins[i]);
@@ -395,8 +455,7 @@ int main()
         {
             mouse.state = MAP_FLOODFILL;
         }
-        else if (mouse.state == MAP_FLOODFILL || mouse.state == MAP_FLOODFILL_BACK)
-        {
+        else if (mouse.state == MAP_FLOODFILL || mouse.state == MAP_FLOODFILL_BACK) {
             scanWalls(mouse);
             floodFill(mouse);
 
@@ -440,6 +499,20 @@ int main()
                     }
                 }
             }
+
+        } else if (mouse.state == FIND_PATH) {
+            std::string path = fastestPath(mouse);
+            std::cout<<path<<std::endl;
+            std::vector<std::string> commands = stateMachine(path);
+            
+            for (std::string command : commands) {
+                std::cout<<command<<" ";
+            }
+            std::cout<<std::endl;
+            break;
+        } else if (mouse.state == FAST_RUN) {
+            // control loop here
+            ;
         }
     }
 
