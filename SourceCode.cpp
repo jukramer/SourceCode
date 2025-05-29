@@ -328,6 +328,77 @@ force_inline void initBackFill(int dir, int x, int y, uint8_t mask) {
     }
 }
 
+std::string fastestPath(Mouse &mouse) {
+    // TODO: encourage to take diagonals
+
+    // Fastest path solely based on floodfill distance
+    std::string path = "";
+
+    Point currentCell = {0, 15};    
+    Direction currentDir = TOP;
+    // Initial point
+    for (int i=0; i<100; i++) {
+        Direction minFloodFillDir;
+        int minFloodFill = 255;
+        int x1, y1;
+
+        for (int i : range(len(DIRECTIONS)))
+        {
+            int nx = currentCell.x + DIRECTIONS[i].x;
+            int ny = currentCell.y + DIRECTIONS[i].y;
+
+            if (nx < 0 || nx >= 16 || ny < 0 || ny >= 16)
+                continue;
+
+            bool wallHere = (mazeMatrix[currentCell.y][currentCell.x].walls & (1 << i));
+            bool wallThere = (mazeMatrix[ny][nx].walls & (1 << opposite((Direction)i)));
+
+            if (wallHere) {
+                // std::cout << "Skipping wall here dir " << i << " from (" << mouse.cellPos.x << "," << mouse.cellPos.y << ") to (" << nx << "," << ny << ")\n";
+                continue;
+            }
+
+            if (wallThere) {
+                // std::cout << "Skipping wall there dir " << i << " from (" << mouse.cellPos.x << "," << mouse.cellPos.y << ") to (" << nx << "," << ny << ")\n";
+                continue;
+            }
+
+            if (mouse.floodMatrix[ny][nx] <= minFloodFill) {
+                minFloodFill = mouse.floodMatrix[ny][nx];
+                minFloodFillDir = (Direction)i;
+                x1 = nx;
+                y1 = ny;
+            }
+        }
+
+        std::cout<<currentDir<<" "<<minFloodFillDir<<std::endl;
+        // Append path depending on relative dir of next cell and mouse
+        if (currentDir == minFloodFillDir) {
+            path += 'F';
+            std::cout<<"Pushing F..."<<std::endl;
+        } else if (minFloodFillDir - currentDir == -1 || minFloodFillDir - currentDir == 3) {
+            path += 'L';
+            std::cout<<"Pushing L..."<<std::endl;
+        } else if (minFloodFillDir - currentDir == 1 || minFloodFillDir - currentDir == -3) {
+            path += 'R';
+            std::cout<<"Pushing R..."<<std::endl;
+        }
+
+        std::cout<<currentCell.x<<" "<<currentCell.y<<" --> "<<x1<<" "<<y1<<" "<<mouse.floodMatrix[y1][x1]<<std::endl;
+        
+        currentCell = {x1, y1};
+        currentDir = minFloodFillDir;
+        std::cout<<currentDir<<" "<<minFloodFillDir<<std::endl;
+        if (mouse.floodMatrix[y1][x1] == 0) {
+            std::cout<<"Breaking"<<std::endl;
+            break;
+        }
+    }
+    path += 'S';
+
+    return path;
+}
+
 
 void floodFill(Mouse &mouse)
 {
@@ -373,8 +444,7 @@ void floodFill(Mouse &mouse)
     int c = 0; // Cell counter
     while (!floodQueue.empty())
     {
-        Point current = floodQueue.back();
-        floodQueue.pop_back();
+        Point current = floodQueue.pop();
         c++;
 
         int x = current.x, y = current.y;
