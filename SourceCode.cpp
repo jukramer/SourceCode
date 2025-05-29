@@ -149,7 +149,7 @@ void printMaze()
             else
                 std::cout << " ";
 
-            std::cout << std::setw(3) << (int) floodMatrix[y][x];
+            std::cout << std::setw(3) << (int)floodMatrix[y][x];
         }
 
         // Right wall of the last cell
@@ -170,86 +170,84 @@ void printMaze()
     }
 }
 
-
 // Note: Must be in the same order as the bit fields in Cell!
 const Point DIRECTIONS[4] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 
-
 class VController
 {
-    public: 
-        double ePrev = 0;
-        double eTot = 0;
+public:
+    double ePrev = 0;
+    double eTot = 0;
 
-        double Kp;
-        double Ki;
-        double Kd;
+    double Kp;
+    double Ki;
+    double Kd;
 
-        // int tPrev;
-        // std::chrono::time_point<std::chrono::steady_clock> tPrev;
-        int64_t tPrev;
+    // int tPrev;
+    // std::chrono::time_point<std::chrono::steady_clock> tPrev;
+    int64_t tPrev;
 
-    VController(double Kp, double Ki, double Kd) {
+    VController(double Kp, double Ki, double Kd)
+    {
         Kp = Kp;
         Ki = Ki;
         Kd = Kd;
 
         // tPrev = to_us_since_boot(absolute_time_t());
         tPrev = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-
     }
-    
-    double output(double vRef, double vCurrent) {
+
+    double output(double vRef, double vCurrent)
+    {
         double e = vRef - vCurrent;
         // int t = to_us_since_boot(absolute_time_t());
         int64_t t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
-        int64_t dt = (t - tPrev)/1000000;
+        int64_t dt = (t - tPrev) / 1000000;
 
-        eTot += e*dt;
-        
-        return Kp*e + Ki*eTot + Kd*(e-ePrev)/dt;
+        eTot += e * dt;
+
+        return Kp * e + Ki * eTot + Kd * (e - ePrev) / dt;
     }
 };
 
-
 class WController
 {
-    public: 
-        double ePrev = 0;
-        double eTot = 0;
+public:
+    double ePrev = 0;
+    double eTot = 0;
 
-        double Kp;
-        double Ki;
-        double Kd;
+    double Kp;
+    double Ki;
+    double Kd;
 
-        // int tPrev;
-        // std::chrono::time_point<std::chrono::steady_clock> tPrev;
-        int64_t tPrev;
+    // int tPrev;
+    // std::chrono::time_point<std::chrono::steady_clock> tPrev;
+    int64_t tPrev;
 
-    WController(double Kp, double Ki, double Kd) {
+    WController(double Kp, double Ki, double Kd)
+    {
         Kp = Kp;
         Ki = Ki;
         Kd = Kd;
 
         // tPrev = to_us_since_boot(absolute_time_t());
         tPrev = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-
     }
-    
-    double output(double wRef, double wCurrent) {
+
+    double output(double wRef, double wCurrent)
+    {
         double e = wRef - wCurrent;
         // int t = to_us_since_boot(absolute_time_t());
         int64_t t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
-        int64_t dt = (t - tPrev)/1000000;
+        int64_t dt = (t - tPrev) / 1000000;
 
-        eTot += e*dt;
-        
-        return Kp*e + Ki*eTot + Kd*(e-ePrev)/dt;
+        eTot += e * dt;
+
+        return Kp * e + Ki * eTot + Kd * (e - ePrev) / dt;
     }
 };
-
 
 class Mouse
 {
@@ -301,21 +299,25 @@ public:
 
 Queue floodQueue;
 
-
-force_inline void tryPropagate(int dir, int x, int y, int dist, uint8_t mask) {
-    if (!(mask & (1 << dir))) return;
+force_inline void tryPropagate(int dir, int x, int y, int dist, uint8_t mask)
+{
+    if (!(mask & (1 << dir)))
+        return;
 
     int nx = x + DIRECTIONS[dir].x;
     int ny = y + DIRECTIONS[dir].y;
     uint8_t ndist = floodMatrix[ny][nx];
-    if (isUnset(nx, ny) || ndist > dist + 1) {
+    if (isUnset(nx, ny) || ndist > dist + 1)
+    {
         setDist(nx, ny, dist + 1);
         floodQueue.push({nx, ny});
     }
 }
 
-force_inline void initBackFill(int dir, int x, int y, uint8_t mask) {
-    if (!(mask & (1 << dir))) return;
+force_inline void initBackFill(int dir, int x, int y, uint8_t mask)
+{
+    if (!(mask & (1 << dir)))
+        return;
 
     int nx = x + DIRECTIONS[dir].x;
     int ny = y + DIRECTIONS[dir].y;
@@ -328,69 +330,66 @@ force_inline void initBackFill(int dir, int x, int y, uint8_t mask) {
     }
 }
 
-std::string fastestPath(Mouse &mouse) {
+std::string fastestPath(Mouse &mouse)
+{
     // TODO: encourage to take diagonals
 
     // Fastest path solely based on floodfill distance
     std::string path = "";
 
-    Point currentCell = {0, 15};    
+    Point currentCell = {0, 15};
     Direction currentDir = TOP;
     // Initial point
-    for (int i=0; i<100; i++) {
+    for (int i = 0; i < 100; i++)
+    {
         Direction minFloodFillDir;
         int minFloodFill = 255;
         int x1, y1;
 
-        for (int i : range(len(DIRECTIONS)))
+        uint8_t mask = moveMask[currentCell.y][currentCell.x];
+        for (int i = 0; i < 4; ++i)
         {
+            if (!(mask & (1 << i)))
+                continue;
+
             int nx = currentCell.x + DIRECTIONS[i].x;
             int ny = currentCell.y + DIRECTIONS[i].y;
 
-            if (nx < 0 || nx >= 16 || ny < 0 || ny >= 16)
-                continue;
-
-            bool wallHere = (mazeMatrix[currentCell.y][currentCell.x].walls & (1 << i));
-            bool wallThere = (mazeMatrix[ny][nx].walls & (1 << opposite((Direction)i)));
-
-            if (wallHere) {
-                // std::cout << "Skipping wall here dir " << i << " from (" << mouse.cellPos.x << "," << mouse.cellPos.y << ") to (" << nx << "," << ny << ")\n";
-                continue;
-            }
-
-            if (wallThere) {
-                // std::cout << "Skipping wall there dir " << i << " from (" << mouse.cellPos.x << "," << mouse.cellPos.y << ") to (" << nx << "," << ny << ")\n";
-                continue;
-            }
-
-            if (mouse.floodMatrix[ny][nx] <= minFloodFill) {
-                minFloodFill = mouse.floodMatrix[ny][nx];
+            if (floodMatrix[ny][nx] <= minFloodFill)
+            {
+                minFloodFill = floodMatrix[ny][nx];
                 minFloodFillDir = (Direction)i;
                 x1 = nx;
                 y1 = ny;
             }
         }
 
-        std::cout<<currentDir<<" "<<minFloodFillDir<<std::endl;
+        std::cout << currentDir << " " << minFloodFillDir << std::endl;
         // Append path depending on relative dir of next cell and mouse
-        if (currentDir == minFloodFillDir) {
+        if (currentDir == minFloodFillDir)
+        {
             path += 'F';
-            std::cout<<"Pushing F..."<<std::endl;
-        } else if (minFloodFillDir - currentDir == -1 || minFloodFillDir - currentDir == 3) {
+            std::cout << "Pushing F..." << std::endl;
+        }
+        else if (minFloodFillDir - currentDir == -1 || minFloodFillDir - currentDir == 3)
+        {
             path += 'L';
-            std::cout<<"Pushing L..."<<std::endl;
-        } else if (minFloodFillDir - currentDir == 1 || minFloodFillDir - currentDir == -3) {
+            std::cout << "Pushing L..." << std::endl;
+        }
+        else if (minFloodFillDir - currentDir == 1 || minFloodFillDir - currentDir == -3)
+        {
             path += 'R';
-            std::cout<<"Pushing R..."<<std::endl;
+            std::cout << "Pushing R..." << std::endl;
         }
 
-        std::cout<<currentCell.x<<" "<<currentCell.y<<" --> "<<x1<<" "<<y1<<" "<<mouse.floodMatrix[y1][x1]<<std::endl;
-        
+        std::cout << currentCell.x << " " << currentCell.y << " --> " << x1 << " " << y1 << " " << floodMatrix[y1][x1] << std::endl;
+
         currentCell = {x1, y1};
         currentDir = minFloodFillDir;
-        std::cout<<currentDir<<" "<<minFloodFillDir<<std::endl;
-        if (mouse.floodMatrix[y1][x1] == 0) {
-            std::cout<<"Breaking"<<std::endl;
+        std::cout << currentDir << " " << minFloodFillDir << std::endl;
+        if (floodMatrix[y1][x1] == 0)
+        {
+            std::cout << "Breaking" << std::endl;
             break;
         }
     }
@@ -398,7 +397,6 @@ std::string fastestPath(Mouse &mouse) {
 
     return path;
 }
-
 
 void floodFill(Mouse &mouse)
 {
@@ -420,7 +418,8 @@ void floodFill(Mouse &mouse)
         floodQueue.push({8, 7});
         floodQueue.push({8, 8});
     }
-    else if (mouse.state == MAP_FLOODFILL_BACK) {
+    else if (mouse.state == MAP_FLOODFILL_BACK)
+    {
         setDist(0, MAZE_SIZE - 1, 0); // Start from bottom left corner
         floodQueue.push({0, MAZE_SIZE - 1});
 
@@ -466,6 +465,23 @@ void floodFill(Mouse &mouse)
 
 ////////////////// FUNCTIONS ////////////////////
 
+void setWall(int x, int y, Direction dir)
+{
+    mazeMatrix[y][x].walls |= (1 << dir);
+    moveMask[y][x] &= ~(1 << dir);
+
+    int nx = x + DIRECTIONS[dir].x;
+    int ny = y + DIRECTIONS[dir].y;
+
+    if (nx >= 0 && nx < 16 && ny >= 0 && ny < 16)
+    {
+        mazeMatrix[ny][nx].walls |= (1 << OPPOSITE[dir]);
+        moveMask[ny][nx] &= ~(1 << OPPOSITE[dir]);
+    }
+
+    API::setWall(x, 15 - y, DIRECTION_CHAR[dir]);
+}
+
 void scanWalls(Mouse &mouse)
 {
     if (API::wallFront())
@@ -498,10 +514,14 @@ int main()
         {
             uint8_t mask = 0b1111;
 
-            if (y == 0)               mask &= ~(1 << TOP);
-            if (x == MAZE_SIZE - 1)   mask &= ~(1 << RIGHT);
-            if (y == MAZE_SIZE - 1)   mask &= ~(1 << BOTTOM);
-            if (x == 0)               mask &= ~(1 << LEFT);
+            if (y == 0)
+                mask &= ~(1 << TOP);
+            if (x == MAZE_SIZE - 1)
+                mask &= ~(1 << RIGHT);
+            if (y == MAZE_SIZE - 1)
+                mask &= ~(1 << BOTTOM);
+            if (x == 0)
+                mask &= ~(1 << LEFT);
 
             moveMask[y][x] = mask;
         }
@@ -511,9 +531,11 @@ int main()
     Mouse mouse;
 
     // Global State Machine
-    
-    while (true) {
-        if (mouse.state == INIT) {
+
+    while (true)
+    {
+        if (mouse.state == INIT)
+        {
             // stdio_init_all();
             // for (int i = 0; i < 27; i++){
             //     gpio_init(allPins[i]);
@@ -525,19 +547,22 @@ int main()
         {
             mouse.state = MAP_FLOODFILL;
         }
-        else if (mouse.state == MAP_FLOODFILL || mouse.state == MAP_FLOODFILL_BACK) {
+        else if (mouse.state == MAP_FLOODFILL || mouse.state == MAP_FLOODFILL_BACK)
+        {
             scanWalls(mouse);
             floodFill(mouse);
 
             Direction minFloodFillDirection;
             int minFloodFill = 255;
-            
+
             int x = mouse.cellPos.x;
             int y = mouse.cellPos.y;
 
             uint8_t mask = moveMask[y][x];
-            for (int i = 0; i < 4; ++i) {
-                if (!(mask & (1 << i))) continue;
+            for (int i = 0; i < 4; ++i)
+            {
+                if (!(mask & (1 << i)))
+                    continue;
 
                 int nx = x + DIRECTIONS[i].x;
                 int ny = y + DIRECTIONS[i].y;
@@ -560,7 +585,8 @@ int main()
                 {
                     std::cout << "Reached goal! Backing..." << std::endl;
                     mouse.state = MAP_FLOODFILL_BACK;
-                } else if (mouse.state == MAP_FLOODFILL_BACK)
+                }
+                else if (mouse.state == MAP_FLOODFILL_BACK)
                 {
                     if (mouse.cellPos.x == 0 && mouse.cellPos.y == MAZE_SIZE - 1)
                     {
@@ -569,18 +595,22 @@ int main()
                     }
                 }
             }
-
-        } else if (mouse.state == FIND_PATH) {
+        }
+        else if (mouse.state == FIND_PATH)
+        {
             std::string path = fastestPath(mouse);
-            std::cout<<path<<std::endl;
+            std::cout << path << std::endl;
             std::vector<std::string> commands = stateMachine(path);
-            
-            for (std::string command : commands) {
-                std::cout<<command<<" ";
+
+            for (std::string command : commands)
+            {
+                std::cout << command << " ";
             }
-            std::cout<<std::endl;
+            std::cout << std::endl;
             break;
-        } else if (mouse.state == FAST_RUN) {
+        }
+        else if (mouse.state == FAST_RUN)
+        {
             // control loop here
             ;
         }
