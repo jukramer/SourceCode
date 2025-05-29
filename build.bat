@@ -1,1 +1,1 @@
-cl /O2 /GL /DNDEBUG /EHsc Sourcecode.cpp functions.cpp /link /LTCG
+cl /O2 /GL /DNDEBUG /EHsc Sourcecode.cpp functions.cpp API.cpp /link /LTCG /std:c++20
