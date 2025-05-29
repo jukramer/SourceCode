@@ -50,7 +50,6 @@ void API::moveForward(int distance) {
     std::cin >> response;
     if (response != "ack") {
         std::cerr << response << std::endl;
-        throw;
     }
 }
 

@@ -37,7 +37,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(SourceCode SourceCode.cpp )
+add_executable(SourceCode SourceCode.cpp API.cpp )
 
 pico_set_program_name(SourceCode "SourceCode")
 pico_set_program_version(SourceCode "0.1")
