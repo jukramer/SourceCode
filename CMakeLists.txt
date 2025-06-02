@@ -53,9 +53,10 @@ pico_enable_stdio_usb(SourceCode 1)
 # Add the standard library to the build
 target_link_libraries(SourceCode
         pico_stdlib
-        #pico_stdio_usb
+        pico_stdio_usb
         hardware_i2c
         pico_cyw43_arch_none
+        hardware_pwm
         )
 
 # Add the standard include files to the build
