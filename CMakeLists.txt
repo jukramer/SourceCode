@@ -27,6 +27,7 @@ set(PICO_BOARD pico_w CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
+add_subdirectory(eigen)
 
 project(SourceCode C CXX ASM)
 set(CMAKE_CXX_STANDARD 23)
@@ -37,7 +38,10 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(SourceCode SourceCode.cpp API.cpp )
+add_executable(SourceCode ActualSourceCode.cpp vl6180x.cpp driver_mpu6500.c driver_mpu6500_fifo.c driver_mpu6500_interface.c vl53l0x.cpp)
+
+target_compile_definitions(SourceCode PRIVATE EIGEN_NO_DEBUG=1 EIGEN_NO_EXCEPTIONS)
+target_include_directories(SourceCode PRIVATE ${CMAKE_CURRENT_LIST_DIR}/eigen)
 
 pico_set_program_name(SourceCode "SourceCode")
 pico_set_program_version(SourceCode "0.1")
@@ -48,17 +52,16 @@ pico_enable_stdio_usb(SourceCode 1)
 
 # Add the standard library to the build
 target_link_libraries(SourceCode
-        pico_stdlib)
+        pico_stdlib
+        #pico_stdio_usb
+        hardware_i2c
+        pico_cyw43_arch_none
+        )
 
 # Add the standard include files to the build
 target_include_directories(SourceCode PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
 )
-
-# Add any user requested libraries
-target_link_libraries(SourceCode 
-        pico_cyw43_arch_none
-        )
 
 pico_add_extra_outputs(SourceCode)
 

@@ -357,7 +357,11 @@ void aStar()
 }
 
 int main()
-{
+{        
+    // Uncomment this line if you want to run the micromouse code, otherwise the MMS simulator.
+    extern int actual_main();
+    return actual_main();
+
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
 

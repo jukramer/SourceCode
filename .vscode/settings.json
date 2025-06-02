@@ -125,6 +125,11 @@
         "execution": "cpp",
         "forward_list": "cpp",
         "queue": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "stdint.h": "c",
+        "__config": "cpp",
+        "__tree": "cpp",
+        "filesystem": "cpp",
+        "eigen": "cpp"
     }
 }
