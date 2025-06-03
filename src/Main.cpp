@@ -222,8 +222,8 @@ inline Pose getCurrentPose() {
     double theta = POSE.theta;
 
     // Read change in pos of each motor
-    double posL = MotorL.readPOS();
-    double posR = MotorR.readPOS();
+    double posL = MotorL.readPOS()/100;
+    double posR = MotorR.readPOS()/100;
     double dPos = (posL + posR)/2;
     double dTheta = (posR - posL)/WHEEL_BASE;
 
