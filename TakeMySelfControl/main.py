@@ -9,7 +9,8 @@ import threading
 import queue
 import time
 import signal
-
+import platform
+    
 os.environ["QT_API"] = "PyQt6"
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
@@ -33,7 +34,11 @@ tabs = ['view', 'config']
 for m in tabs:
     globals()[m] = __import__(m)
 
-example_mission = json.load(open(os.path.join(os.path.dirname(__file__), 'example_mission.json')))
+if platform.system() == "Darwin":
+    example_mission = json.load(open(os.path.join(os.path.dirname(__file__), 'example_mission_mac.json')))
+else:
+    example_mission = json.load(open(os.path.join(os.path.dirname(__file__), 'example_mission.json')))
+
 
 class MissionValueError(BaseException):
     def __init__(self, msg):
@@ -91,7 +96,6 @@ class TakeMySelfControl(QMainWindow):
         menuBar = QMenuBar(self)
         self.setMenuBar(menuBar)
 
-        import platform
         if platform.system() == "Darwin":
             menuBar.setNativeMenuBar(False)
 

@@ -4,7 +4,7 @@
     "wasd_turn_pwm": 60.0,
     "wheel_radius": 2.1,
     "wheel_base": 8.0,
-    "directory": "",
-    "run_command": "",
-    "build_command": ""
+    "directory": "/Users/soti/DevLocal/SourceCode",
+    "run_command": "./build/a.out",
+    "build_command": "sh ./build.sh"
 }
