@@ -10,6 +10,7 @@
 #include "hardware/gpio.h"
 #include "pins.hpp"
 #include "pico/time.h"
+#include <math.h>
 
 #include "drivers/vl53l0x.h"
 #include "drivers/vl6180x.h"
@@ -63,7 +64,8 @@ Motor::Motor(Motor_Choice choice)
     this->pinENC = pinENC;
 
     this->totalTicks = totalTicks;
-    this->prevTicks = prevTicks;
+    this->prevTicksRPM = 0;
+    this->prevTicksPOS = 0;
 
     gpio_init(pinENC);
     gpio_set_dir(pinENC, GPIO_IN);
@@ -120,9 +122,9 @@ float Motor::readRPM()
 {
     uint64_t now = time_us_64();
 
-    double pulses = double(*totalTicks - prevTicks);
-    printf("Pulses: %d, ticks: %d, prev ticks: %d ", pulses, *totalTicks, prevTicks);
-    prevTicks = *totalTicks;
+    double pulses = double(*totalTicks - prevTicksRPM);
+    printf("Pulses: %d, ticks: %d, prev ticks: %d ", pulses, *totalTicks, prevTicksRPM);
+    prevTicksRPM = *totalTicks;
 
     float dt_us = (now - tPrev);
     printf("tNow: %lld tPrev: %lld dt: %f\n", now, tPrev, dt_us);
@@ -139,6 +141,15 @@ float Motor::readRPM()
     }
 
     return 0.0;
+}
+
+float Motor::readPOS() {
+    double pulses = double(*totalTicks - prevTicksPOS);
+    prevTicksPOS = *totalTicks;
+
+    double deltaPos = pulses/TICKS_PER_REV*2*M_PI*WHEEL_RADIUS;
+
+    return deltaPos;
 }
 
 uint pwm_setup(uint gpio)

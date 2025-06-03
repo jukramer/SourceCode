@@ -66,7 +66,7 @@ o   o   o---o   o---o   o---o---o---o---o---o---o   o   o   o   o
 |   |       |       |                               |   |   |   |
 o   o---o   o---o   o   o---o---o---o---o---o   o---o   o   o   o
 |       |       |   |                                   |   |   |
-o---o   o---o   o   o---o---o---o---o---o---o---o   o---o   o   o
+o   o   o---o   o   o---o---o---o---o---o---o---o   o---o   o   o
 |       |   |                                   |           |   |
 o   o   o   o---o---o---o---o   o   o---o---o---o---o   o---o   o
 | S |                           |                               |

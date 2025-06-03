@@ -11,7 +11,7 @@ force_inline void setCost(int x, int y, byte dist)
     FLOOD_GEN_MATRIX[y][x] = CURRENT_FLOOD_GEN;
 }
 
-Queue floodQueue;
+Queue<Location> floodQueue;
 
 force_inline void tryPropagate(int dir, int x, int y, int dist, uint8_t mask)
 {

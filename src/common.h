@@ -20,6 +20,7 @@ using byte = uint8_t;
 #define STATE_MAP_EXPLORE_BACK 3
 #define STATE_FAST_RUN 5
 
+
 inline volatile byte STATE = STATE_IDLE; // Global state of the mouse
 
 enum Direction
@@ -57,11 +58,68 @@ enum Heading
 
 using string = const char *;
 
+struct Pose {
+    double x;
+    double y;
+    double theta;
+    double v;
+    double w;
+
+    force_inline Pose operator+(Pose p2) {
+        return {x+p2.x, y+p2.y, theta+p2.theta, v+p2.v, w+p2.w};
+    }
+
+    force_inline Pose operator-(Pose p2) {
+        return {x-p2.x, y-p2.y, theta-p2.theta, v-p2.v, w-p2.w};
+    }
+
+    force_inline bool operator>(Pose p2) {
+        if (x>p2.x&&y>p2.y&&theta>p2.theta&&v>p2.v&&w>p2.w) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    force_inline bool operator<(Pose p2) {
+        if (x<p2.x&&y<p2.y&&theta<p2.theta&&v<p2.v&&w<p2.w) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    force_inline bool operator>=(Pose p2) {
+        if (x>=p2.x&&y>=p2.y&&theta>=p2.theta&&v>=p2.v&&w>=p2.w) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    force_inline bool operator<=(Pose p2) {
+        if (x<=p2.x&&y<=p2.y&&theta<=p2.theta&&v<=p2.v&&w<=p2.w) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+};
 
 struct Command {
     string action; // FWD, SS, STOP
     int value; // 3, 90...
 };
+
+// Movement 
+#define IDLE 0
+#define FWD 1
+#define TURN_L 2
+#define TURN_R 3
+#define STOP -1
+inline int currentMovement = IDLE;
+inline bool targetReached = false;
+inline Pose targetPose = {0, 0, 0, 0, 0};
 
 std::vector<Command> stateMachineSimple(const std::string &path);
 
@@ -103,15 +161,16 @@ public:
 };
 
 // Ring buffer queue for flood fill
+template <typename T>
 struct Queue
 {
-    Location buffer[256];
+    T buffer[256];
     byte head = 0, tail = 0;
 
     force_inline void reset() { head = tail = 0; }
     force_inline bool empty() const { return head == tail; }
-    force_inline void push(Location p) { buffer[head++ & 255] = p; }
-    force_inline Location pop() { return buffer[tail++ & 255]; }
+    force_inline void push(T p) { buffer[head++ & 255] = p; }
+    force_inline T pop() { return buffer[tail++ & 255]; }
 };
 
 enum WallState
@@ -149,5 +208,5 @@ constexpr Location OFFSET_LOCATIONS[4] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 #define FORWARD 1
 #define BACKWARD -1
 
-#define WHEEL_RADIUS 21.5
+#define WHEEL_RADIUS 0.022
 #define WHEEL_BASE 0.076

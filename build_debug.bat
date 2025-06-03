@@ -2,4 +2,4 @@ mkdir -p build
 
 cd build
 
-cl ../src/Main.cpp ../src/API_Simulation.cpp /EHsc /DEBUG /Z7 /std:c++20
+cl ../src/Main.cpp ../src/API_Simulation.cpp ../src/functions.cpp  /EHsc /DEBUG /Z7 /std:c++20

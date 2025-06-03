@@ -50,7 +50,9 @@ std::vector<Command> stateMachineSimple(const std::string &path)
             if (c == 'F')
             {
                 n = 1;
+                // printf("Start, F\n");
                 state = ORTHO;
+                // printf("State is now ORTHO!\n");
             }
             break;
 
@@ -74,6 +76,7 @@ std::vector<Command> stateMachineSimple(const std::string &path)
                 Command com;
                 com.action = "FWD";
                 com.value = n;
+                output.push_back(com);
                 state = ORTHO_R;
             }
             else if (c == 'S')
@@ -110,11 +113,11 @@ std::vector<Command> stateMachineSimple(const std::string &path)
                 com1.action = "TRN";
                 com1.value = 90;
                 output.push_back(com1);
-                Command com2;
-                com2.action = "FWD";
-                com2.value = 1;
-                // output.push_back("FWD1");
-                output.push_back(com2);
+                // Command com2;
+                // com2.action = "FWD";
+                // com2.value = 1;
+                // // output.push_back("FWD1");
+                // output.push_back(com2);
             }
             else if (c == 'R')
             {
@@ -123,11 +126,11 @@ std::vector<Command> stateMachineSimple(const std::string &path)
                 com1.action = "TRN";
                 com1.value = 90;
                 output.push_back(com1);
-                Command com2;
-                com2.action = "FWD";
-                com2.value = 1;
-                // output.push_back("FWD1");
-                output.push_back(com2);
+                // Command com2;
+                // com2.action = "FWD";
+                // com2.value = 1;
+                // // output.push_back("FWD1");
+                // output.push_back(com2);
                 state = ORTHO_R;
             }
             else if (c == 'S')
@@ -137,15 +140,17 @@ std::vector<Command> stateMachineSimple(const std::string &path)
                 com1.value = 90;
                 output.push_back(com1);
 
-                Command com2;
-                com1.action = "FWD";
-                com1.value = 1;
-                output.push_back(com2);
+                // Command com2;
+                // com2.action = "FWD";
+                // com2.value = 1;
+                // output.push_back(com2);
                 
                 Command com3;
-                com1.action = "STOP";
-                com1.value = 0;
+                com3.action = "STOP";
+                com3.value = 0;
                 output.push_back(com3);
+
+                // state = STOP;
 
                 // output.push_back("SS90EL");
                 // output.push_back("FWD1");
@@ -173,10 +178,10 @@ std::vector<Command> stateMachineSimple(const std::string &path)
                 com1.value = -90;
                 output.push_back(com1);
 
-                Command com2;
-                com2.action = "FWD";
-                com2.value = 1;
-                output.push_back(com2);
+                // Command com2;
+                // com2.action = "FWD";
+                // com2.value = 1;
+                // output.push_back(com2);
                 // output.push_back("SS90ER");
                 // output.push_back("FWD1");
                 state = ORTHO_L;
@@ -187,11 +192,11 @@ std::vector<Command> stateMachineSimple(const std::string &path)
                 com1.action = "TRN";
                 com1.value = -90;
                 output.push_back(com1);
-                Command com2;
-                com2.action = "FWD";
-                com2.value = 1;
+                // Command com2;
+                // com2.action = "FWD";
+                // com2.value = 1;
 
-                output.push_back(com2);
+                // output.push_back(com2);
                 // output.push_back("SS90ER");
                 // output.push_back("FWD1");
             }
@@ -202,15 +207,17 @@ std::vector<Command> stateMachineSimple(const std::string &path)
                 com1.value = -90;
                 output.push_back(com1);
 
-                Command com2;
-                com1.action = "FWD";
-                com1.value = 1;
-                output.push_back(com2);
+                // Command com2;
+                // com2.action = "FWD";
+                // com2.value = 1;
+                // output.push_back(com2);
                 
                 Command com3;
-                com1.action = "STOP";
-                com1.value = 0;
+                com3.action = "STOP";
+                com3.value = 0;
                 output.push_back(com3);
+
+                // state = STOP;
 
                 // output.push_back("SS90ER");
                 // output.push_back("FWD1");
@@ -219,6 +226,7 @@ std::vector<Command> stateMachineSimple(const std::string &path)
             break;
         }
     }
+    // printf("Finished generating commands!\n");
 
     return output;
 }
