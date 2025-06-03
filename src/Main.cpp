@@ -14,10 +14,12 @@
 #define KI_S 1.0
 #define KD_S 0.0
 
-#define V_MAX 2.0
-#define W_MAX 3.0
-
 #define CELL_WIDTH 0.18
+
+#define V_MAX 2.0
+#define TURN_RADIUS = (CELL_WIDTH/2.0)
+#define W_MAX (V_MAX/TURN_RADIUS)
+
 
 class VController
 {
@@ -267,6 +269,7 @@ inline Pose getCurrentPose() {
 void setTarget(Command command) {
     targetReached = false;
     if (command.action == "FWD") {
+        // Forward for command.value cells
         currentMovement = FWD;
         targetPose.v = V_MAX;
         targetPose.w = 0;
@@ -279,9 +282,12 @@ void setTarget(Command command) {
         } else if (POSE.theta - 270 <= 0.1) {
             targetPose.x += CELL_WIDTH*command.value;
         }
-    }
+    } else if (command.action == "TRN" && command.value==90.0) {
+        // Left turn
+        ;
 
-    if (command.action == "STOP") {
+
+    } else if (command.action == "STOP") {
         currentMovement = STOP;
         targetPose.v = 0;
         targetPose.w = 0;
@@ -360,7 +366,11 @@ int main()
         MotorL.setPWM(dutyL);
         MotorR.setPWM(dutyR);
 
+        // Set new target if old one reached
         targetReached = checkTargetReached();
+        if (targetReached) {
+            setTarget(commandQueue.pop());
+        }
 
         // if (stdio_usb_connected())
         // {
