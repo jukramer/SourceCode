@@ -490,7 +490,7 @@ class Mouse(Body):
         self.left_rpm = _compute_rpm_single(clamped_left_pwm, self.left_rpm)
         self.right_rpm = _compute_rpm_single(clamped_right_pwm, self.right_rpm)
 
-        print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}") 
+        print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}, dt: {dt}")
         
         wr = self.u.wheel_radius * SCALE
         wb = self.u.wheel_base * SCALE
