@@ -177,7 +177,7 @@ class TakeMySelfControl(QMainWindow):
 
         self.console_text_box = QPlainTextEdit(self)
         
-        if sys.platform == "Darwin":
+        if platform.system() == "Darwin":
             font = QFont("Monaco", 10)
         else:
             font = QFont("Courier", 10)
