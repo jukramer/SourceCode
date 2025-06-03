@@ -1,5 +1,6 @@
 #include "API.h"
 #include "common.h"
+#include <math.h>
 #include <vector>
 
 // Controller Constants
@@ -15,6 +16,8 @@
 
 #define V_MAX 2.0
 #define W_MAX 3.0
+
+#define CELL_WIDTH 0.18
 
 class VController
 {
@@ -124,13 +127,19 @@ class SteeringController
 
 };
 
+VController VContr(KP_V, KI_V, KD_V);
+WController WContr(KP_W, KI_W, KD_W);
+SteeringController SContr(KP_S, KI_S, KD_S);
+
+Motor MotorL(Motor_Choice::LEFT);
+Motor MotorR(Motor_Choice::RIGHT);
+
 class StanleyController
 {
     public:
     StanleyController() {
     }
 };
-
 
 using string = const char *;
 
@@ -149,21 +158,6 @@ public:
     }
     T& operator[](size_t idx) { return buffer[idx]; }
     size_t size() const { return size_; }
-};
-
-class Trajectory
-{
-    public:
-    Trajectory(Array<string> &commands) {
-        for (int i = 0; i < commands.size(); i++) {
-            string command = commands[i];
-
-        }
-    }
-
-    StatePrediction getPos() {
-
-    }
 };
 
 
@@ -201,7 +195,7 @@ void motorTest(Motor &Motor)
     }
 }
 
-std::pair<int, int> controlLoop(VController &VContr, WController &WContr, Motor &MotorL, Motor &MotorR, float vTarget, float wTarget)
+std::pair<int, int> controlLoop(float vTarget, float wTarget)
 {
     float rpmCurrentL = MotorL.readRPM();
     float rpmCurrentR = MotorR.readRPM();
@@ -221,16 +215,81 @@ std::pair<int, int> controlLoop(VController &VContr, WController &WContr, Motor 
     return {dutyL, dutyR};
 }
 
+inline Pose getCurrentPose() {
+    // Get current pose
+    double x = POSE.x;
+    double y = POSE.y;
+    double theta = POSE.theta;
+
+    // Read change in pos of each motor
+    double posL = MotorL.readPOS();
+    double posR = MotorR.readPOS();
+    double dPos = (posL + posR)/2;
+    double dTheta = (posR - posL)/WHEEL_BASE;
+
+    // Update pose
+    x += dPos*cos(POSE.theta);
+    y += dPos*cos(POSE.theta);
+    theta += dTheta;
+    Pose newPose = {x, y, theta, POSE.v, POSE.w};
+
+    return newPose;
+}
+
+void setTarget(Command command) {
+    targetReached = false;
+    if (command.action == "FWD") {
+        currentMovement = FWD;
+        targetPose.v = V_MAX;
+        targetPose.w = 0;
+        if (POSE.theta <= 0.1) {
+            targetPose.y += CELL_WIDTH*command.value;
+        } else if (POSE.theta - 90 <= 0.1) {
+            targetPose.x -= CELL_WIDTH*command.value;
+        } else if (POSE.theta - 180 <= 0.1) {
+            targetPose.y -= CELL_WIDTH*command.value;
+        } else if (POSE.theta - 270 <= 0.1) {
+            targetPose.x += CELL_WIDTH*command.value;
+        }
+    }
+
+    if (command.action == "STOP") {
+        currentMovement = STOP;
+        targetPose.v = 0;
+        targetPose.w = 0;
+        if (POSE.theta <= 0.1) {
+            targetPose.y += CELL_WIDTH;
+        } else if (POSE.theta - 90 <= 0.1) {
+            targetPose.x -= CELL_WIDTH;
+        } else if (POSE.theta - 180 <= 0.1) {
+            targetPose.y -= CELL_WIDTH;
+        } else if (POSE.theta - 270 <= 0.1) {
+            targetPose.x += CELL_WIDTH;
+        }
+    }
+    // } else if (step == 'L') {
+    //     currentMovement = TURN_L;
+    //     if (POSE.theta <= 0.1) {
+    //         targetPose.y += CELL_WIDTH;
+    //     } else if (POSE.theta - 90 <= 0.1) {
+    //         targetPose.x -= CELL_WIDTH;
+    //     } else if (POSE.theta - 180 <= 0.1) {
+    //         targetPose.y -= CELL_WIDTH;
+    //     } else if (POSE.theta - 270 <= 0.1) {
+    //         targetPose.x += CELL_WIDTH;
+    //     }
+    // }
+}
+
+bool checkTargetReached() {
+    
+    return false;
+}
+
+
 int main()
 {
     API::init();
-
-    VController VContr(KP_V, KI_V, KD_V);
-    WController WContr(KP_W, KI_W, KD_W);
-    SteeringController SContr(KP_S, KI_S, KD_S);
-
-    Motor MotorL(Motor_Choice::LEFT);
-    Motor MotorR(Motor_Choice::RIGHT);
 
     double vtarg = 5;
     double vout1 = VContr.output(vtarg, 0);
@@ -240,28 +299,40 @@ int main()
     double wout1 = WContr.output(vtarg, 0);
     double wout2 = WContr.output(vtarg, 2);
     double wout3 = WContr.output(vtarg, 3);
+    // std::vector<Command> commands = stateMachineSimple("FLFLS");
+
+    Queue<Command> commandQueue = {Command {"STOP", 0}, Command {"FWD", 3}};
+    setTarget(commandQueue.pop());
+    // commandQueue.push(Command {"FWD", 0})
 
     while (true)
     {
-        if (stdio_usb_connected())
-        {
-            std::vector<Command> commands = stateMachineSimple("FFLRFF");
+        POSE = getCurrentPose();
+        controlLoop(targetPose.v, targetPose.w);  
 
-            for (Command command : commands) {
-                printf("%s %f ", command.action, command.value);
-            }
 
-            // auto [pwmL, pwmR] = controlLoop(VContr, WContr, MotorL, MotorR, 2, 0);
-            // MotorL.setPWM(pwmL);
-            // MotorR.setPWM(pwmR);
-            // printf("Duty Left: %d Duty Right: %d\n", pwmL, pwmR);
-        }
-        else
-        {
-            // MotorL.setPWM(0);
-            // MotorR.setPWM(0);
-            ;
-        }
+
+
+        // if (stdio_usb_connected())
+        // {
+        //     ;
+        //     // for (Command command : commands) {
+        //     //     printf("%s %d ", command.action, command.value);
+        //     //     printf("\n");
+        //     // }
+
+        //     // auto [pwmL, pwmR] = controlLoop(VContr, WContr, MotorL, MotorR, 2, 0);
+        //     // MotorL.setPWM(pwmL);
+        //     // MotorR.setPWM(pwmR);
+        //     // printf("Duty Left: %d Duty Right: %d\n", pwmL, pwmR);
+        // }
+        // else
+        // {
+        //     // MotorL.setPWM(0);
+        //     // MotorR.setPWM(0);
+        //     ;
+        // // }
+        // }
     }
 }
 

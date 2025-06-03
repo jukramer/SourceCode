@@ -14,7 +14,8 @@ public:
     int currentRPM = 0;
 
     const volatile uint *totalTicks;
-    uint prevTicks;
+    uint prevTicksRPM;
+    uint prevTicksPOS;
 
     int pinForward;
     int pinBackward;
@@ -31,6 +32,7 @@ public:
 
     void setPWM(float PWM);
     float readRPM();
+    float readPOS();
 };
 
 struct TOF_Reading
@@ -77,6 +79,7 @@ inline volatile byte FLOOD_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
 inline volatile byte FLOOD_GEN_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
 inline volatile byte MOVE_MATRIX[MAZE_SIZE][MAZE_SIZE];
 inline volatile byte CURRENT_FLOOD_GEN = 0;
+inline Pose POSE = {0, 0, 0, 0, 0};
 
 inline void setWall(Location location, Direction dir, WallState state)
 {
