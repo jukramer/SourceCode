@@ -21,9 +21,9 @@ Motor::Motor(Motor_Choice choice)
     this->choice = choice;
 }
 
-void Motor::setPWM(int PWM)
+void Motor::setPWM(float PWM)
 {
-    printf(">>> setPWM %s %d\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT", PWM);
+    printf(">>> setPWM %s %f\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT", PWM);
     fflush(stdout);
 }
 

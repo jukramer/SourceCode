@@ -255,26 +255,34 @@ class TakeMySelfControl(QMainWindow):
                         preexec_fn=os.setsid
                     )
 
-                    # Read both streams concurrently using threads
-                    def read_stream(stream, label):
-                        for line in iter(stream.readline, ''):
+                    def read_stream(stream):
+                        output_buffer = []
+                        # Adjust these values based on desired responsiveness vs. performance
+                        
+                        MAX_BUFFER_LINES = 20  # Max lines to buffer before an update
+                        MAX_BUFFER_TIME_S = 0.1 # Max time (e.g., 100ms) before forcing an update
+                        
+                        last_emit_time = time.monotonic()
+
+                        for line in iter(stream.readline, ''): # line usually includes newline
                             if self.should_stop:
                                 break
 
+                            # --- Special handling for ">>>" commands ---
                             if line.startswith(">>>"):
                                 parts = line.split()
                                 if len(parts) < 2:
-                                    self.text_emitter.append_text.emit(f">>> Error parsing command: {line.strip()}\n")
+                                    output_buffer.append(f">>> Error parsing command: {line.strip()}\n") 
                                     continue
-
                                 command = parts[1]
                                 if command == "setPWM":
                                     if len(parts) < 4:
-                                        self.text_emitter.append_text.emit(f">>> Error parsing setPWM command: {line.strip()}\n")
+                                        output_buffer.append(f">>> Error parsing setPWM command: {line.strip()}\n")
                                         continue
+
                                     motor = parts[2].lower()
                                     if motor != "left" and motor != "right":
-                                        self.text_emitter.append_text.emit(f">>> Unknown motor: {motor}\n")
+                                        output_buffer.append(f">>> Unknown motor: {motor}\n")
                                         continue
 
                                     pwm = parts[3]
@@ -282,7 +290,7 @@ class TakeMySelfControl(QMainWindow):
                                         pwm = float(pwm)
                                         pwm = max(min(pwm, 100.0), -100.0)
                                     except ValueError:
-                                        self.text_emitter.append_text.emit(f">>> Invalid PWM value: {pwm}\n")
+                                        output_buffer.append(f">>> Invalid PWM value: {pwm}\n")
                                         continue
 
                                     if motor == "left":
@@ -291,33 +299,47 @@ class TakeMySelfControl(QMainWindow):
                                         self.pg_renderer.mouse.right_pwm = pwm
                                     continue
 
-                                if command == "readRPM":
+                                elif command == "readRPM":
                                     if len(parts) < 3:
-                                        self.text_emitter.append_text.emit(f">>> Error parsing readRPM command: {line.strip()}\n")
+                                        output_buffer.append(f">>> Error parsing readRPM command: {line.strip()}\n")
                                         continue
+                                    
                                     motor = parts[2].lower()
                                     if motor != "left" and motor != "right":
-                                        self.text_emitter.append_text.emit(f">>> Unknown motor: {motor}\n")
+                                        output_buffer.append(f">>> Unknown motor: {motor}\n")
                                         continue
 
                                     rpm_value = self.pg_renderer.mouse.left_rpm if motor == "left" else self.pg_renderer.mouse.right_rpm
                                     self.process.stdin.write(f"{rpm_value}\n")
                                     self.process.stdin.flush()
                                     continue
+                                else:
+                                    output_buffer.append(f"Unknown command: {line.strip()}\n")
+                                    continue 
                             else:
-                                self.text_emitter.append_text.emit(f"{line.strip()}\n")
+                                # --- Regular line: add to buffer ---
+                                output_buffer.append(line)
 
-                    stdout_thread = threading.Thread(target=read_stream, args=(self.process.stdout, "stdout"))
-                    stderr_thread = threading.Thread(target=read_stream, args=(self.process.stderr, "stderr"))
+                            current_time = time.monotonic()
+                            if (len(output_buffer) >= MAX_BUFFER_LINES or (current_time - last_emit_time) >= MAX_BUFFER_TIME_S):
+                                if output_buffer:
+                                    self.text_emitter.append_text.emit("".join(output_buffer))
+                                    output_buffer.clear()
+                                    last_emit_time = current_time
+
+                        # --- Emit any remaining lines after the loop ---
+                        if output_buffer:
+                            self.text_emitter.append_text.emit("".join(output_buffer))
+                            output_buffer.clear()
+
+                    stdout_thread = threading.Thread(target=read_stream, args=(self.process.stdout,))
 
                     stdout_thread.start()
-                    stderr_thread.start()
                     stdout_thread.join()
-                    stderr_thread.join()
 
                     self.process.stdout.close()
-                    self.process.stderr.close()
                     self.process.wait()
+                    self.process = None
                 except Exception as e:
                     self.text_box.write(f"Exception running command: {e}\n")
 
@@ -333,7 +355,6 @@ class TakeMySelfControl(QMainWindow):
                     self.should_stop = True
                     os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
                     self.process.wait()
-                    self.process = None
                 except Exception as e:
                     self.text_box.write(f"Error stopping process: {e}\n")
                 on_run_complete()
