@@ -215,8 +215,8 @@ std::pair<int, int> controlLoop(VController &VContr, WController &WContr, Motor 
 
     printf("VOut: %f WOut: %f rpmL: %f rpmR: %f vL: %f vR: %f W: %f\n", vOut, wOut, rpmCurrentL, rpmCurrentR, vCurrentL, vCurrentR, wCurrent);
 
-    int dutyL = int(std::max(std::min((vOut - wOut), 220.0), 0.0));
-    int dutyR = int(std::max(std::min((vOut + wOut), 220.0), 0.0));
+    int dutyL = int(std::max(std::min((vOut - wOut), 100.0), -100.0));
+    int dutyR = int(std::max(std::min((vOut + wOut), 100.0), -100.0));
 
     return {dutyL, dutyR};
 }

@@ -25,9 +25,11 @@ public:
     float prevRPM = 0.0;
     uint64_t tPrev;
 
+    Motor_Choice choice;
+
     Motor(Motor_Choice choice);
 
-    int setPWM(int PWM);
+    void setPWM(int PWM);
     float readRPM();
 };
 

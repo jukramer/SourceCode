@@ -1,1 +1,6 @@
-clang++ SourceCode.cpp functions.cpp API.cpp -std=c++20
+mkdir -p build
+
+cd build
+
+clang++ ../src/Main.cpp ../src/API_Simulation.cpp -std=c++20
+
