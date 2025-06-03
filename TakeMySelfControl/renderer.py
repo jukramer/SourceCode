@@ -158,11 +158,11 @@ def fast_ray_march(
 ):
     norm_ray_dir = np.linalg.norm(ray_dir_world)
     if norm_ray_dir < 1e-9: # Ray direction is zero vector
-        return np.array([np.nan, np.nan], dtype=np.float64)
+        return np.array([np.nan, np.nan], dtype=np.float64), False
     ray_dir_normalized = ray_dir_world / norm_ray_dir
 
     if not maze or not maze[0]: # Empty maze
-        return np.array([np.nan, np.nan], dtype=np.float64)
+        return np.array([np.nan, np.nan], dtype=np.float64), False
     
     maze_grid_height = len(maze)
     maze_grid_width = len(maze[0])
@@ -207,7 +207,7 @@ def fast_ray_march(
 
         if current_distance_to_boundary > MAX_SENSOR_RANGE:
             # Ray exceeded max range before hitting a wall or exiting grid within range
-            return ray_origin_world + ray_dir_normalized * MAX_SENSOR_RANGE
+            return ray_origin_world + ray_dir_normalized * MAX_SENSOR_RANGE, False
 
         # Check for wall hit if the cell we are currently in (and about to exit) is valid
         if cell_being_exited_was_valid:
@@ -220,7 +220,7 @@ def fast_ray_march(
                  # This case should ideally not be hit if map_y was valid.
                  # Indicates an issue with MAZE_Y_IDX_FLIP_CONST or coordinate setup.
                  # If ray starts outside valid map_y range for indexing, treat as exiting grid.
-                 return ray_origin_world + ray_dir_normalized * current_distance_to_boundary
+                 return ray_origin_world + ray_dir_normalized * current_distance_to_boundary, True
 
 
             current_cell = maze[current_cell_y_idx][map_x]
@@ -228,10 +228,10 @@ def fast_ray_march(
             if advancing_in_x:
                 if ray_step_x > 0: # Moving Right
                     if current_cell.wall_right:
-                        return ray_origin_world + ray_dir_normalized * current_distance_to_boundary
+                        return ray_origin_world + ray_dir_normalized * current_distance_to_boundary, True
                 elif ray_step_x < 0: # Moving Left
                     if current_cell.wall_left:
-                        return ray_origin_world + ray_dir_normalized * current_distance_to_boundary
+                        return ray_origin_world + ray_dir_normalized * current_distance_to_boundary, True
             else: # Advancing in Y
                 if ray_step_y > 0: # Moving "Up" in world coords (positive Y)
                                    # Corresponds to checking 'top' wall of cell in a typical grid depiction
@@ -249,10 +249,10 @@ def fast_ray_march(
                                    # if ray_dir_normalized[1] > 0, step_y = 1 (map_y increases, moving "up" in world coords) -> check wall_top of cell (map_x, map_y)
                                    # if ray_dir_normalized[1] < 0, step_y = -1 (map_y decreases, moving "down" in world coords) -> check wall_bottom of cell (map_x, map_y)
                         if current_cell.wall_top: # Wall at the positive Y face of cell (map_x, map_y)
-                             return ray_origin_world + ray_dir_normalized * current_distance_to_boundary
+                             return ray_origin_world + ray_dir_normalized * current_distance_to_boundary, True
                 elif ray_step_y < 0: # Moving "Down" in world coords (negative Y)
                         if current_cell.wall_bottom: # Wall at the negative Y face of cell (map_x, map_y)
-                            return ray_origin_world + ray_dir_normalized * current_distance_to_boundary
+                            return ray_origin_world + ray_dir_normalized * current_distance_to_boundary, True
         
         # Advance to next cell
         if advancing_in_x:
@@ -266,7 +266,23 @@ def fast_ray_march(
         # the ray has exited. The current_distance_to_boundary was the distance to this exit line.
         # This distance is guaranteed to be <= MAX_SENSOR_RANGE due to the check at the loop start.
         if not ((0 <= map_x < maze_grid_width) and (0 <= map_y < maze_grid_height)):
-            return ray_origin_world + ray_dir_normalized * current_distance_to_boundary
+            return ray_origin_world + ray_dir_normalized * current_distance_to_boundary, True
+
+ANGLE_OFFSETS_TOF = np.array([0, np.pi / 2, -np.pi / 2, np.pi / 4, -np.pi / 4]) + np.pi/2
+
+LOCAL_TOF_OFFSET = np.array([6.5, 0]) * SCALE
+LOCAL_TOF_OFFSET_RADIUS = 2.5 * SCALE
+
+def rotate_vector(v, rot):
+    rotation_matrix = np.array([[math.cos(rot), -math.sin(rot)],
+                                [math.sin(rot), math.cos(rot)]])
+    return np.dot(rotation_matrix, v)
+
+def get_tof_location_from_mouse(pos, rot, index):
+    angle_offset = rotate_vector(np.array([LOCAL_TOF_OFFSET_RADIUS, 0]), ANGLE_OFFSETS_TOF[index] - np.pi/2)
+    # print(f"Angle offset for TOF {index}: {angle_offset / SCALE}")
+    offset_world = rotate_vector(LOCAL_TOF_OFFSET + angle_offset, rot)
+    return pos + offset_world
 
 def update_tof_sensor_data_ray_marching(
     pos: np.ndarray,
@@ -280,23 +296,27 @@ def update_tof_sensor_data_ray_marching(
     or [np.nan, np.nan] if no intersection or out of range.
     """
     noisy_sensor_points = [np.array([np.nan, np.nan]) for _ in range(5)]
+    valid_readings = [False] * 5
 
     # Angle offsets for FRONT, LEFT, RIGHT, FRONT_LEFT_45, FRONT_RIGHT_45
-    ANGLE_OFFSETS = np.array([0, np.pi / 2, -np.pi / 2, np.pi / 4, -np.pi / 4]) + np.pi/2
     MAX_SENSOR_RANGES = np.array([255.0 / SCALE] * 5)  # Same range for all sensors
     MAX_SENSOR_RANGES[0] = 5 * 255.0 / SCALE  # Front sensor has a longer range
 
     for i in range(5): # For each of the 5 ToF sensors
-        angle = rot + ANGLE_OFFSETS[i]
+        angle = rot + ANGLE_OFFSETS_TOF[i]
         
         # Ray direction based on your convention:
         # angle = 0 (robot front) => (0, -1) (Negative Y)
         # angle = pi/2 (robot left) => (1, 0) (Positive X)
         ray_dir = np.array([math.sin(angle), -math.cos(angle)])
 
-        intersection_point = fast_ray_march(
-            pos, ray_dir, maze, MAX_SENSOR_RANGES[i]
+        tof_location = get_tof_location_from_mouse(pos, rot, i)
+        # print(f"ToF {i} Location: {tof_location / SCALE}, ToF location - pos: {(tof_location - pos) / SCALE}")
+
+        intersection_point, valid = fast_ray_march(
+            tof_location, ray_dir, maze, MAX_SENSOR_RANGES[i]
         )
+        valid_readings[i] = valid # Valid is False if ray exceeded max range (overflow)
         
         if not np.isnan(intersection_point[0]):
             distance = np.linalg.norm(intersection_point - pos)
@@ -309,8 +329,10 @@ def update_tof_sensor_data_ray_marching(
                 noisy_sensor_points[i] = intersection_point + noise
             else:
                 noisy_sensor_points[i] = intersection_point # No noise if distance is zero
+        else:
+            valid_readings[i] = False  # Mark as invalid if intersection point is NaN
 
-    return noisy_sensor_points
+    return noisy_sensor_points, valid_readings
 
 NOISE_MAG = 0.05
 
@@ -336,12 +358,16 @@ class Mouse(Body):
         self.input_left_pwm = 0.0
         self.input_right_pwm = 0.0
 
+        self.left_pos = 0.0
+        self.right_pos = 0.0
+
         self.cell_x = 0
         self.cell_y = 0
 
         self.rot = np.pi / 2
 
         self.sensor_data = [np.zeros(2) for _ in range(5)]
+        self.sensor_data_valid = [False] * 5
 
         self.image = pg.image.load("sprite.png").convert_alpha()
 
@@ -489,21 +515,23 @@ class Mouse(Body):
 
         self.left_rpm = _compute_rpm_single(clamped_left_pwm, self.left_rpm)
         self.right_rpm = _compute_rpm_single(clamped_right_pwm, self.right_rpm)
-
-        # print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}, dt: {dt}")
         
         wr = self.u.wheel_radius * SCALE
         wb = self.u.wheel_base * SCALE
 
         # Convert to m/s and rad/s
         circ = 2 * math.pi * wr
+
+        self.left_pos += abs(self.left_rpm * circ / 60 * dt / SCALE)
+        self.right_pos += abs(self.right_rpm * circ / 60 * dt / SCALE)
+
+        print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}, left pos: {self.left_pos}, right pos: {self.right_pos} dt: {dt}")
+
         v = (self.left_rpm + self.right_rpm) / 2 * circ / 60
         omega = (self.right_rpm - self.left_rpm) * circ / (60 * wb)
 
         angle = self.rot
-        rotation_matrix = np.array([[math.cos(angle), -math.sin(angle)],
-                                    [math.sin(angle), math.cos(angle)]])
-        v_world = rotation_matrix @ np.array([v, 0])
+        v_world = rotate_vector(np.array([v, 0]), angle)
 
         self.vel = v_world.copy()
         self.ang_vel = omega
@@ -550,7 +578,9 @@ class Mouse(Body):
         self.dirty_transform = True
 
         # self.update_with_oracle(dt)
-        self.sensor_data = update_tof_sensor_data_ray_marching(self.pos, self.rot, renderer.maze)
+        sd, sdv = update_tof_sensor_data_ray_marching(self.pos, self.rot, renderer.maze)
+        self.sensor_data[:] = sd
+        self.sensor_data_valid[:] = sdv
 
 
     # def update_with_oracle(self, dt):
@@ -584,7 +614,16 @@ class Mouse(Body):
         # measured_y = -(self.pos[1] - STARTING_POS_OFFSET[1]) + random.gauss(0, 1) * NOISE_MAG
 
         # self.kalman.update_position(measured_x, measured_y)
+    
+    def get_tof_reading(self, index):
 
+
+        point = self.sensor_data[index]
+        distance = np.linalg.norm(self.pos - point) / SCALE
+
+        distance *= 10.0 # to mm 
+        return distance, self.sensor_data_valid[index]
+    
     def draw(self, surface):
         rotated_image = pg.transform.rotate(self.image, math.degrees(-self.rot - np.pi / 2))
         rotated_rect = rotated_image.get_rect(center=self.pos)
@@ -645,6 +684,7 @@ class PgRenderer:
                 if x == CELL_COUNT - 1:
                     cell.wall_right = True
         self.refresh_walls()
+
 
     # def toggle_wall(self, x, y, direction, drag_id=None):
     #     offset_x, offset_y = OFFSETS[direction]

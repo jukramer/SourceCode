@@ -6,7 +6,6 @@
 
 #include "pico/stdlib.h"
 #include "pico/stdio_usb.h"
-#include "pico/cyw43_arch.h"
 #include "hardware/pwm.h"
 #include "hardware/gpio.h"
 #include "pins.hpp"
@@ -50,7 +49,7 @@ Motor::Motor(Motor_Choice choice)
 {
     this->choice = choice;
 
-    int pinForward = choice == Motor_Choice::LEFT ?  dirA1Pin : dirB1Pin;
+    int pinForward = choice == Motor_Choice::LEFT ? dirA1Pin : dirB1Pin;
     int pinBackward = choice == Motor_Choice::LEFT ? dirA2Pin : dirB2Pin;
     int pinPWM = choice == Motor_Choice::LEFT ? spdAPin : spdBPin;
     int pinENC = choice == Motor_Choice::LEFT ? mrencPin : mlencPin;
@@ -91,7 +90,8 @@ void Motor::setPWM(float PWM)
         dir = FORWARD;
     }
 
-    if (PWM > 100.0) {
+    if (PWM > 100.0)
+    {
         PWM = 100.0;
         printf("Invalid PWM value. Capped to 100 magnitude max.\n");
     }
@@ -136,7 +136,6 @@ float Motor::readRPM()
         // float rps = (pulses / TICKS_PER_REV) * (1000000.0f / dt_us) / GEAR_RATIO;
         float rpm = (pulses / TICKS_PER_REV) * (60000000.0f / dt_us) / GEAR_RATIO; // Convert to RPM
         printf("RPM reading is: %f\n", rpm);
-        prevRPM = rpm;
         return rpm;
     }
 
@@ -161,14 +160,15 @@ uint pwm_setup(uint gpio)
     return slice;
 }
 
-int pico_led_init()
+void pico_led_init()
 {
-    return cyw43_arch_init();
+    gpio_init(25);
+    gpio_set_dir(25, GPIO_OUT);
 }
 
 void pico_set_led(bool on)
 {
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, on);
+    gpio_put(25, on);
 }
 
 Adafruit_VL6180X TOF_XS[4] = {
@@ -184,6 +184,7 @@ void init_gpio(uint8_t gpio)
     gpio_init(gpio);
     gpio_set_dir(gpio, GPIO_OUT);
     gpio_put(gpio, false); // Set GPIO low to indicate the program has started
+    printf("GPIO %d initialized and set to LOW.\n", gpio);
 }
 
 void xshut(uint8_t gpio, bool state)
@@ -210,151 +211,193 @@ static float gs_gyro_dps[128][3];
 #define MPU_FILTER_DELAY_MS 11.8f
 #define MPU_FILTER_DELAY_S (MPU_FILTER_DELAY_MS / 1000.0f)
 
-namespace API
+bool scan_address(i2c_inst_t *i2c, uint8_t addr)
 {
-    void init()
+    uint8_t buf;
+    int ret = i2c_read_timeout_us(i2c, addr, &buf, 1, false, 2000);
+    return ret >= 0;
+}
+void global_init()
+{
+    stdio_init_all();
+
+    while (!stdio_usb_connected())
     {
-        stdio_init_all();
+        sleep_ms(1000);
+    }
 
-        while (!stdio_usb_connected())
-        {
-            sleep_ms(1000);
-        }
+    //
+    // Turn on LEDs
+    //
+    // gpio_init(22);
+    // gpio_set_dir(22, GPIO_OUT);
+    // gpio_put(22, 1); // Set GPIO 22 high to indicate the program has started
 
-        //
-        // Turn on LEDs
-        //
-        // gpio_init(22);
-        // gpio_set_dir(22, GPIO_OUT);
-        // gpio_put(22, 1); // Set GPIO 22 high to indicate the program has started
+    pico_led_init();
+    pico_set_led(true);
 
-        pico_led_init();
-        pico_set_led(true);
+    //
+    // Initialize XSHUT pins for VL6180X sensors
+    //
+    for (int i = tofXL1Pin; i <= tofXS4Pin; i++)
+    {
+        init_gpio(i);
+    }
+    printf("All TOF sensors are now in hardware standby.\n");
+    sleep_us(100);
 
-        //
-        // Initialize XSHUT pins for VL6180X sensors
-        //
-        for (int i = 16; i <= 20; i++)
-        {
-            init_gpio(i);
-        }
-        printf("All TOF sensors are now in hardware standby.\n");
-        sleep_us(100);
+    //
+    // Initialize I2C for VL6180X sensors
+    //
+    gpio_init(tofsdaPin);
+    gpio_init(tofsclPin);
 
-        //
-        // Initialize I2C for VL6180X sensors
-        //
-        gpio_init(tofsdaPin);
-        gpio_init(tofsclPin);
+    i2c_deinit(I2C_CHANNEL_TOF);
+    i2c_init(I2C_CHANNEL_TOF, 400 * 1000);
 
-        i2c_deinit(I2C_CHANNEL_TOF);
-        i2c_init(I2C_CHANNEL_TOF, 400 * 1000);
+    gpio_set_function(tofsdaPin, GPIO_FUNC_I2C);
+    gpio_set_function(tofsclPin, GPIO_FUNC_I2C);
 
-        gpio_set_function(tofsdaPin, GPIO_FUNC_I2C);
-        gpio_set_function(tofsclPin, GPIO_FUNC_I2C);
+    gpio_pull_up(tofsdaPin);
+    gpio_pull_up(tofsclPin);
 
-        gpio_pull_up(tofsdaPin);
-        gpio_pull_up(tofsclPin);
+    //
+    // Initialize I2C for IMU
+    //
+    gpio_init(imusdaPin);
+    gpio_init(imusclPin);
 
-        //
-        // Initialize I2C for IMU
-        //
-        gpio_init(imusdaPin);
-        gpio_init(imusclPin);
+    i2c_deinit(I2C_CHANNEL_IMU);
+    i2c_init(I2C_CHANNEL_IMU, 400 * 1000);
 
-        i2c_deinit(I2C_CHANNEL_IMU);
-        i2c_init(I2C_CHANNEL_IMU, 400 * 1000);
+    gpio_set_function(imusdaPin, GPIO_FUNC_I2C);
+    gpio_set_function(imusclPin, GPIO_FUNC_I2C);
 
-        gpio_set_function(imusdaPin, GPIO_FUNC_I2C);
-        gpio_set_function(imusclPin, GPIO_FUNC_I2C);
+    gpio_pull_up(imusdaPin);
+    gpio_pull_up(imusclPin);
 
-        gpio_pull_up(imusdaPin);
-        gpio_pull_up(imusclPin);
+    //
+    // Initialize IMU
+    //
+    gpio_init(imuIntPin);
+    gpio_set_dir(imuIntPin, GPIO_IN);
+    gpio_pull_up(imuIntPin); // optional, depending on your MPU circuit
 
-        //
-        // Initialize IMU
-        //
-        gpio_init(imuIntPin);
-        gpio_set_dir(imuIntPin, GPIO_IN);
-        gpio_pull_up(imuIntPin); // optional, depending on your MPU circuit
+    gpio_set_irq_enabled_with_callback(imuIntPin, GPIO_IRQ_EDGE_FALL, true, &imu_int);
 
-        gpio_set_irq_enabled_with_callback(imuIntPin, GPIO_IRQ_EDGE_FALL, true, &imu_int);
+    if (0 != mpu6500_fifo_init(MPU6500_INTERFACE_IIC, (mpu6500_address_t)0x68)) // Default address for MPU6500
+    {
+        printf("mpu6500_fifo_init failed.\n");
+    }
+    else
+    {
+        printf("mpu6500_fifo_init succeeded.\n");
+    }
 
-        if (0 != mpu6500_fifo_init(MPU6500_INTERFACE_IIC, (mpu6500_address_t)0x68)) // Default address for MPU6500
-        {
-            printf("mpu6500_fifo_init failed.\n");
-        }
+    //
+    // Initialize VL6180X sensors
+    //
+    int tofSensorIdx = 0;
+    int tofSensorAddresses[] = {0x3A, 0x3B, 0x3C, 0x3D, 0x3E}; // Addresses for VL6180X sensors
 
-        //
-        // Initialize VL6180X sensors
-        //
-        int tofSensorIdx = 0;
-        int tofSensorAddresses[] = {0x2A, 0x2B, 0x2C, 0x2D, 0x2E}; // Addresses for VL6180X sensors
+    for (int gpio = tofXS1Pin; gpio <= tofXS4Pin; gpio++)
+    {
+        if (gpio != tofXS2Pin) continue;
 
-        for (int gpio = 17; gpio <= 20; gpio++)
-        {
-            xshut(gpio, true);
-
-            int retryCount = 0;
-
-            while (!TOF_XS[tofSensorIdx].begin())
-            {
-                sleep_ms(1);
-
-                retryCount++;
-                if (retryCount > 100)
-                {
-                    printf("Failed to initialize VL6180X on GPIO %d after 100 retries.\n", gpio);
-                    break;
-                }
-            }
-            TOF_XS[tofSensorIdx].setAddress(tofSensorAddresses[tofSensorIdx]);
-            tofSensorIdx += 1;
-        }
-
-        //
-        // Initialize VL53L0X sensor
-        //
-        /*xshut(16, true);
-
-        sleep_ms(50);
-        for (uint8_t addr = 0x00; addr <= 0x77; ++addr)
-            {
-                // printf("  -> 0x%02X\n", addr);
-                if (scan_address(I2C_CHANNEL_TOF, addr))
-                {
-                    printf("  -> Found device at 0x%02X\n", addr);
-                }
-            }
+        xshut(gpio, true);
 
         int retryCount = 0;
-        while (!TOF_XL.init(false))
+
+        while (!TOF_XS[tofSensorIdx].begin())
         {
-            sleep_ms(1);
+            sleep_ms(100);
 
             retryCount++;
-            if (retryCount > 100)
+            if (false) // if (retryCount > 100)
             {
-                printf("Failed to initialize VL53L0X after 100 retries.\n");
+                printf("Failed to initialize VL6180X on GPIO %d after 100 retries.\n", gpio);
+                xshut(gpio, false); // Turn off the sensor
+    
                 break;
             }
-        }*/
-
-        printf("Initializing Motor GPIOs...\n");
-        gpio_init(25);
-        gpio_set_dir(25, GPIO_OUT);
-        gpio_put(25, 1);
-
-        gpio_init(dirA1Pin);
-        gpio_set_dir(dirA1Pin, GPIO_OUT);
-        gpio_init(dirA2Pin);
-        gpio_set_dir(dirA2Pin, GPIO_OUT);
-        pwm_setup(spdAPin);
-
-        gpio_init(dirB1Pin);
-        gpio_set_dir(dirB1Pin, GPIO_OUT);
-        gpio_init(dirB2Pin);
-        gpio_set_dir(dirB2Pin, GPIO_OUT);
-        pwm_setup(spdBPin);
+        }
+        TOF_XS[tofSensorIdx].setAddress(tofSensorAddresses[tofSensorIdx]);
+        tofSensorIdx += 1;
     }
+
+    //
+    // Initialize VL53L0X sensor
+    //
+    xshut(tofXL1Pin, true);
+
+    sleep_ms(50);
+    for (uint8_t addr = 0x00; addr <= 0x77; ++addr)
+    {
+        // printf("  -> 0x%02X\n", addr);
+        if (scan_address(I2C_CHANNEL_TOF, addr))
+        {
+            printf("  -> Found device at 0x%02X\n", addr);
+        }
+    }
+
+    int retryCount = 0;
+    while (!TOF_XL.init(false))
+    {
+        sleep_ms(1);
+
+        retryCount++;
+        if (retryCount > 100)
+        {
+            printf("Failed to initialize VL53L0X after 100 retries.\n");
+            break;
+        }
+    }
+
+    gpio_init(dirA1Pin);
+    gpio_set_dir(dirA1Pin, GPIO_OUT);
+    gpio_init(dirA2Pin);
+    gpio_set_dir(dirA2Pin, GPIO_OUT);
+    pwm_setup(spdAPin);
+
+    gpio_init(dirB1Pin);
+    gpio_set_dir(dirB1Pin, GPIO_OUT);
+    gpio_init(dirB2Pin);
+    gpio_set_dir(dirB2Pin, GPIO_OUT);
+    pwm_setup(spdBPin);
+
+    //
+    // Start TOF continuous ranging
+    //
+    TOF_XL.startContinuous(50); // Start continuous ranging with 50ms period
+    for (int i = 0; i < 4; i++)
+    {
+        TOF_XS[i].startRangeContinuous(50);
+    }
+}
+
+uint8_t mm[4] = {};
+float mmXL = 0;
+
+void global_read_tofs()
+{
+    for (int i = 0; i < 0; i++)
+    {
+        if (TOF_XS[i].isRangeComplete())
+        {
+            mm[i] = TOF_XS[i].readRangeResult();
+        }
+        // float lux = TOF_XS[i].readLux(VL6180X_ALS_GAIN_5);
+        // uint8_t range = TOF_XS[i].readRange();
+        // uint8_t status = TOF_XS[i].readRangeStatus();
+        // printf("Sensor %d - Lux: %.2f, Range: %d mm, Status: %d, ", i, lux, range, status);
+
+        printf("%d: Range: %d mm | ", i, mm[i]);
+    }
+
+    if (TOF_XL.readRangeContinuousMillimeters())
+    {
+        mmXL = TOF_XL.readRangeContinuousMillimeters();
+        printf("XL Range: %d mm", (int)mmXL);
+    }
+    printf("\n");
 }

@@ -12,7 +12,7 @@
 #define KD_W 0.238664893739785
 #define KP_S 1.0 // Steering controller
 #define KI_S 1.0
-#define KD_S 0.0 
+#define KD_S 0.0
 
 #define V_MAX 2.0
 #define W_MAX 3.0
@@ -96,7 +96,7 @@ public:
 
 class SteeringController
 {
-    public:
+public:
     double ePrev = 0;
     double eTot = 0;
     double tPrev;
@@ -105,7 +105,8 @@ class SteeringController
     double Ki;
     double Kd;
 
-    SteeringController(double Kp, double Ki, double Kd) {
+    SteeringController(double Kp, double Ki, double Kd)
+    {
         this->Kp = Kp;
         this->Ki = Ki;
         this->Kd = Kd;
@@ -113,18 +114,18 @@ class SteeringController
         tPrev = time_us_64();
     }
 
-    int output(double diffTOF) {
+    int output(double diffTOF)
+    {
         int t = time_us_64();
         double dt = (t - tPrev) / 1000000;
 
-        eTot += diffTOF*dt;
+        eTot += diffTOF * dt;
 
         double output = Kp * diffTOF + Ki * eTot;
         ePrev = diffTOF;
 
         return int(output);
     }
-
 };
 
 VController VContr(KP_V, KI_V, KD_V);
@@ -136,30 +137,52 @@ Motor MotorR(Motor_Choice::RIGHT);
 
 class StanleyController
 {
-    public:
-    StanleyController() {
+public:
+    StanleyController()
+    {
     }
 };
 
 using string = const char *;
 
-template<typename T, size_t N = 512>
-class Array {
+template <typename T, size_t N = 512>
+class Array
+{
 private:
     T buffer[N];
     size_t size_ = 0;
+
 public:
-    void push_back(const T& val) {
-        if (size_ < N) {
+    void push_back(const T &val)
+    {
+        if (size_ < N)
+        {
             buffer[size_++] = val;
-        } else {
+        }
+        else
+        {
             printf("Out of space");
         }
     }
-    T& operator[](size_t idx) { return buffer[idx]; }
+    T &operator[](size_t idx) { return buffer[idx]; }
     size_t size() const { return size_; }
 };
 
+class Trajectory
+{
+public:
+    Trajectory(Array<string> &commands)
+    {
+        for (int i = 0; i < commands.size(); i++)
+        {
+            string command = commands[i];
+        }
+    }
+
+    /*StatePrediction getPos()
+    {
+    }*/
+};
 
 void motorTest(Motor &Motor)
 {
@@ -291,7 +314,7 @@ bool checkTargetReached() {
 
 int main()
 {
-    API::init();
+    global_init();
 
     double vtarg = 5;
     double vout1 = VContr.output(vtarg, 0);
@@ -309,15 +332,29 @@ int main()
 
     while (true)
     {
+        global_read_tofs();
+
+        // auto reading = global_get_tof(TOF_Direction::FRONT);
+        // printf("TOF Front: %f Valid: %d\n", reading.distance, (int)reading.valid);
+
+        sleep_ms(100);
+
+        if (stdio_usb_connected())
+        {
+            /*std::vector<Command> commands = stateMachineSimple("FFLRFF");
+
+            for (Command command : commands)
+            {
+                printf("%s %f ", command.action, command.value);
+            }*/
+        }
+
         POSE = getCurrentPose();
         auto [dutyL, dutyR] = controlLoop(targetPose.v, targetPose.w);  
         MotorL.setPWM(dutyL);
         MotorR.setPWM(dutyR);
 
         targetReached = checkTargetReached();
-
-
-
 
         // if (stdio_usb_connected())
         // {
@@ -462,37 +499,7 @@ while (true)
 // Main loop
 //
 
-// TOF_XL.startContinuous(50); // Start continuous ranging with 50ms period
 
-for (int i = 0; i < 4; i++)
-{
-    TOF_XS[i].startRangeContinuous(50);
-}
-
-/**
- *         for (int i = 0; i < 0; i++)
-    {
-        if (TOF_XS[i].isRangeComplete())
-        {
-            mm[i] = TOF_XS[i].readRangeResult();
-        }
-
-        // float lux = TOF_XS[i].readLux(VL6180X_ALS_GAIN_5);
-        // uint8_t range = TOF_XS[i].readRange();
-        // uint8_t status = TOF_XS[i].readRangeStatus();
-        // printf("Sensor %d - Lux: %.2f, Range: %d mm, Status: %d, ", i, lux, range, status);
-
-        // printf("%d: Range: %d mm | ", i, mm[i]);
-    }
-
-            if (TOF_XL.readRangeContinuousMillimeters())
-    {
-        mmXL = TOF_XL.readRangeContinuousMillimeters();
-        printf("XL Range: %d mm ", (int)mmXL);
-    }
-
-uint8_t mm[4] = {};
-float mmXL = 0;
 
 auto t_prev = time_us_64();
 auto t_end_calib = t_prev + 3000000; // 3s calibration

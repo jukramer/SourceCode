@@ -117,6 +117,7 @@ struct Command {
 #define TURN_L 2
 #define TURN_R 3
 #define STOP -1
+
 inline int currentMovement = IDLE;
 inline bool targetReached = false;
 inline Pose targetPose = {0, 0, 0, 0, 0};

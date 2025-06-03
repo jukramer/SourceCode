@@ -38,6 +38,9 @@
     "raspberry-pi-pico.cmakePath": "${HOME}/.pico-sdk/cmake/v3.31.5/bin/cmake",
     "raspberry-pi-pico.ninjaPath": "${HOME}/.pico-sdk/ninja/v1.12.1/ninja",
     "files.associations": {
+        "*.page-template": "vue",
+        "*.layout-template": "vue",
+        "*.vue": "vue",
         "array": "cpp",
         "atomic": "cpp",
         "bit": "cpp",
@@ -101,6 +104,22 @@
         "cfenv": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "__locale": "cpp",
+        "__verbose_abort": "cpp",
+        "bitset": "cpp",
+        "ios": "cpp",
+        "locale": "cpp",
+        "mutex": "cpp",
+        "print": "cpp",
+        "__bit_reference": "cpp",
+        "__hash_table": "cpp",
+        "__node_handle": "cpp",
+        "__split_buffer": "cpp",
+        "complex": "cpp",
+        "execution": "cpp",
+        "forward_list": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
     }
 }
