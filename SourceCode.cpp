@@ -26,11 +26,9 @@
 #define INIT 0
 #define IDLE 1
 #define MAP_FLOODFILL 2
-
-#define MAP_ASTAR 3
-#define MAP_CUSTOM 4
-
 #define MAP_FLOODFILL_BACK 5
+#define FIND_ROUTE 6
+#define FAST_RUN 7
 
 // Mapping States
 
@@ -294,6 +292,12 @@ public:
 
         return output;
     }
+
+    void reset() {
+        ePrev = 0;
+        eTot = 0;
+        tPrev = 0;
+    }
 };
 
 
@@ -334,6 +338,12 @@ public:
         ePrev = e;
 
         return output;
+    }
+
+    void reset() {
+        ePrev = 0;
+        eTot = 0;
+        tPrev = 0;
     }
 };
 
@@ -501,6 +511,11 @@ force_inline void initBackFill(int dir, int x, int y, uint8_t mask) {
 }
 
 
+double readTOF() {
+    return 200.0;
+}
+
+
 uint pwm_setup(uint gpio)
 {
     gpio_set_function(gpio, GPIO_FUNC_PWM);
@@ -662,6 +677,7 @@ std::string fastestPath(Mouse &mouse)
     return path;
 }
 
+
 void motorTest(Motor &Motor) {
     if (stdio_usb_connected()) {
             printf("Forward...\n");
@@ -713,7 +729,7 @@ std::pair<int, int> controlLoop(VController &VContr, WController &WContr, Mouse 
 }
 
 
-int main()
+int main() 
 {        
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
@@ -783,7 +799,6 @@ int main()
     }
 
     
-
     // printf("VOut1: %f VOut2: %f VOut3: %f\nWOut1: %f WOut2: %f WOut3: %f", vout1, vout2, vout3, wout1, wout2, wout3);
 
 
@@ -811,7 +826,7 @@ int main()
         // printf("RPM Left: %f RPM Right: %f\n", rpmL, rpmR);
         // MotorL.setPWM(dutyL, FORWARD);
         // MotorR.setPWM(dutyR, FORWARD);
-    }
+    
 
     // gpio_put(dirA1Pin, 1);
     // gpio_put(dirA2Pin, 0);
@@ -819,7 +834,7 @@ int main()
 
     // double out = VContr.output(1000, 0);
     
-    /*
+    
 
     // Global State Machine
     while (true)
@@ -882,7 +897,10 @@ int main()
                     }
                 }
             }
+        } else if (mouse.state == FAST_RUN) {
+            ;
+            
         }
     }
-    */
+}
 
