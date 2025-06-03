@@ -302,8 +302,6 @@ void global_init()
 
     for (int gpio = tofXS1Pin; gpio <= tofXS4Pin; gpio++)
     {
-        if (gpio != tofXS2Pin) continue;
-
         xshut(gpio, true);
 
         int retryCount = 0;
@@ -313,7 +311,7 @@ void global_init()
             sleep_ms(100);
 
             retryCount++;
-            if (false) // if (retryCount > 100)
+            if (retryCount > 100)
             {
                 printf("Failed to initialize VL6180X on GPIO %d after 100 retries.\n", gpio);
                 xshut(gpio, false); // Turn off the sensor

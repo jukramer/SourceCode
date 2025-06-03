@@ -43,6 +43,7 @@ float Motor::readRPM()
 
 float Motor::readPOS() {
     printf(">>> readPOS %s\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT");
+    fflush(stdout);
 
     float dist = 0.0f;
     scanf("%f", &dist);
