@@ -282,7 +282,9 @@ void setTarget(Command command) {
 }
 
 bool checkTargetReached() {
-    
+    if (POSE-targetPose < Pose {0.1, 0.1, 0.1, 0.1, 0.1}) {
+        return true;
+    }
     return false;
 }
 
@@ -308,7 +310,11 @@ int main()
     while (true)
     {
         POSE = getCurrentPose();
-        controlLoop(targetPose.v, targetPose.w);  
+        auto [dutyL, dutyR] = controlLoop(targetPose.v, targetPose.w);  
+        MotorL.setPWM(dutyL);
+        MotorR.setPWM(dutyR);
+
+        targetReached = checkTargetReached();
 
 
 

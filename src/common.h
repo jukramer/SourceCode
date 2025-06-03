@@ -72,6 +72,38 @@ struct Pose {
     force_inline Pose operator-(Pose p2) {
         return {x-p2.x, y-p2.y, theta-p2.theta, v-p2.v, w-p2.w};
     }
+
+    force_inline bool operator>(Pose p2) {
+        if (x>p2.x&&y>p2.y&&theta>p2.theta&&v>p2.v&&w>p2.w) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    force_inline bool operator<(Pose p2) {
+        if (x<p2.x&&y<p2.y&&theta<p2.theta&&v<p2.v&&w<p2.w) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    force_inline bool operator>=(Pose p2) {
+        if (x>=p2.x&&y>=p2.y&&theta>=p2.theta&&v>=p2.v&&w>=p2.w) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    force_inline bool operator<=(Pose p2) {
+        if (x<=p2.x&&y<=p2.y&&theta<=p2.theta&&v<=p2.v&&w<=p2.w) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 };
 
 struct Command {
