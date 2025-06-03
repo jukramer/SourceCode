@@ -136,7 +136,6 @@ float Motor::readRPM()
         // float rps = (pulses / TICKS_PER_REV) * (1000000.0f / dt_us) / GEAR_RATIO;
         float rpm = (pulses / TICKS_PER_REV) * (60000000.0f / dt_us) / GEAR_RATIO; // Convert to RPM
         printf("RPM reading is: %f\n", rpm);
-        prevRPM = rpm;
         return rpm;
     }
 

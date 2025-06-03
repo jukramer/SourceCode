@@ -11,7 +11,6 @@ class Motor
 {
 public:
     int PWM = 0;
-    int currentRPM = 0;
 
     const volatile uint *totalTicks;
     uint prevTicksRPM;
@@ -23,8 +22,9 @@ public:
     int pinENC;
     int dir = FORWARD;
 
-    float prevRPM = 0.0;
     uint64_t tPrev;
+
+    float prevDist = 0.0f;
 
     Motor_Choice choice;
 

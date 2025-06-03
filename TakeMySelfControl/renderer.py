@@ -280,7 +280,7 @@ def rotate_vector(v, rot):
 
 def get_tof_location_from_mouse(pos, rot, index):
     angle_offset = rotate_vector(np.array([LOCAL_TOF_OFFSET_RADIUS, 0]), ANGLE_OFFSETS_TOF[index] - np.pi/2)
-    print(f"Angle offset for TOF {index}: {angle_offset / SCALE}")
+    # print(f"Angle offset for TOF {index}: {angle_offset / SCALE}")
     offset_world = rotate_vector(LOCAL_TOF_OFFSET + angle_offset, rot)
     return pos + offset_world
 
@@ -311,7 +311,7 @@ def update_tof_sensor_data_ray_marching(
         ray_dir = np.array([math.sin(angle), -math.cos(angle)])
 
         tof_location = get_tof_location_from_mouse(pos, rot, i)
-        print(f"ToF {i} Location: {tof_location / SCALE}, ToF location - pos: {(tof_location - pos) / SCALE}")
+        # print(f"ToF {i} Location: {tof_location / SCALE}, ToF location - pos: {(tof_location - pos) / SCALE}")
 
         intersection_point, valid = fast_ray_march(
             tof_location, ray_dir, maze, MAX_SENSOR_RANGES[i]
@@ -357,6 +357,9 @@ class Mouse(Body):
         self.right_rpm = 0.0
         self.input_left_pwm = 0.0
         self.input_right_pwm = 0.0
+
+        self.left_pos = 0.0
+        self.right_pos = 0.0
 
         self.cell_x = 0
         self.cell_y = 0
@@ -512,14 +515,18 @@ class Mouse(Body):
 
         self.left_rpm = _compute_rpm_single(clamped_left_pwm, self.left_rpm)
         self.right_rpm = _compute_rpm_single(clamped_right_pwm, self.right_rpm)
-
-        # print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}, dt: {dt}")
         
         wr = self.u.wheel_radius * SCALE
         wb = self.u.wheel_base * SCALE
 
         # Convert to m/s and rad/s
         circ = 2 * math.pi * wr
+
+        self.left_pos += abs(self.left_rpm * circ / 60 * dt / SCALE)
+        self.right_pos += abs(self.right_rpm * circ / 60 * dt / SCALE)
+
+        print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}, left pos: {self.left_pos}, right pos: {self.right_pos} dt: {dt}")
+
         v = (self.left_rpm + self.right_rpm) / 2 * circ / 60
         omega = (self.right_rpm - self.left_rpm) * circ / (60 * wb)
 

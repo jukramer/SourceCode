@@ -334,6 +334,23 @@ class TakeMySelfControl(QMainWindow):
                                     self.process.stdin.write(f"{rpm_value}\n")
                                     self.process.stdin.flush()
                                     continue
+                                elif command == "readPOS":
+                                    if len(parts) < 3:
+                                        output_buffer.append(f">>> Error parsing readPOS command: {line.strip()}\n")
+                                        continue
+                                    
+                                    motor = parts[2].lower()
+                                    if motor != "left" and motor != "right":
+                                        output_buffer.append(f">>> Unknown motor: {motor}\n")
+                                        continue
+
+                                    pos_value = self.pg_renderer.mouse.left_pos if motor == "left" else self.pg_renderer.mouse.right_pos
+                                    if self.process.stdin.closed:
+                                        continue
+
+                                    self.process.stdin.write(f"{pos_value}\n")
+                                    self.process.stdin.flush()
+                                    continue
                                 elif command == "readTOF":
                                     if len(parts) < 3:
                                         output_buffer.append(f">>> Error parsing readTOF command: {line.strip()}\n")

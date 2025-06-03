@@ -41,6 +41,20 @@ float Motor::readRPM()
     return rpm;
 }
 
+float Motor::readPOS() {
+    printf(">>> readPOS %s\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT");
+
+    float dist = 0.0f;
+    scanf("%f", &dist);
+    
+    if (prevDist == 0.0f) {
+        prevDist = dist;
+    }
+
+    return dist - prevDist;
+}
+
+
 void global_init()
 {
 }
