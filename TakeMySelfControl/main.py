@@ -11,6 +11,8 @@ import time
 import signal
 import platform
     
+import numpy as np
+
 os.environ["QT_API"] = "PyQt6"
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
@@ -326,7 +328,29 @@ class TakeMySelfControl(QMainWindow):
                                         continue
 
                                     rpm_value = self.pg_renderer.mouse.left_rpm if motor == "left" else self.pg_renderer.mouse.right_rpm
+                                    if self.process.stdin.closed:
+                                        continue
+
                                     self.process.stdin.write(f"{rpm_value}\n")
+                                    self.process.stdin.flush()
+                                    continue
+                                elif command == "readTOF":
+                                    if len(parts) < 3:
+                                        output_buffer.append(f">>> Error parsing readTOF command: {line.strip()}\n")
+                                        continue
+                                    
+                                    try:
+                                        sensor = int(parts[2])
+                                        if sensor < 0 or sensor >= 5:
+                                            raise ValueError("Sensor index out of range")
+                                    except ValueError:
+                                        output_buffer.append(f">>> Invalid sensor index: {parts[2]}\n")
+                                        continue
+
+                                    tof_reading, tof_valid = self.pg_renderer.mouse.get_tof_reading(sensor)
+                                    if self.process.stdin.closed:
+                                        continue
+                                    self.process.stdin.write(f"{tof_reading} {'t' if tof_valid else 'f'}\n")
                                     self.process.stdin.flush()
                                     continue
                                 else:

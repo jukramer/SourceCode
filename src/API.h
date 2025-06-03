@@ -35,7 +35,7 @@ public:
 
 struct TOF_Reading
 {
-    float distance = 0.0f;
+    float distance = 0;
     bool valid = false;
 };
 
@@ -48,23 +48,18 @@ enum class TOF_Direction
     FRONT_RIGHT_45 = 4
 };
 
-namespace API
-{
-    void init();
-    
-    /*
-     * Returns the reading of the chosen TOF sensor in millimeters.
-     * If the reading is invalid (underflow or overflow), the
-     * "valid" flag will be set to false.
-     */
-    TOF_Reading readTOF(TOF_Direction direction);
+void global_init();
+void global_read_tofs();
 
-    /*
-     * Updates the UI in the simulation to show 
-     * that the mouse thinks there is a wall there.
-     */
-    void setWall_UI(int x, int y, Direction direction);
-};
+/*
+ * Returns the reading of the chosen TOF sensor in millimeters.
+ * If the reading is invalid (underflow or overflow), the
+ * "valid" flag will be set to false.
+ */
+TOF_Reading global_get_tof(TOF_Direction direction);
+
+// This is only for simulation...
+void setWall_UI(int x, int y, Direction direction);
 
 extern "C" {
 uint64_t time_us_64();
@@ -90,5 +85,5 @@ inline void setWall(Location location, Direction dir, WallState state)
         MOVE_MATRIX[n.y][n.x] &= ~(1 << OPPOSITE[dir]);
     }
 
-    API::setWall_UI(location.x, location.y, dir);
+    setWall_UI(location.x, location.y, dir);
 }

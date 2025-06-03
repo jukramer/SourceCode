@@ -4,15 +4,18 @@
 #include <chrono>
 #include <thread>
 
-uint64_t time_us_64() {
+uint64_t time_us_64()
+{
     return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-bool stdio_usb_connected() {
+bool stdio_usb_connected()
+{
     return true;
 }
 
-void sleep_ms(uint32_t ms) {
+void sleep_ms(uint32_t ms)
+{
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
@@ -38,7 +41,26 @@ float Motor::readRPM()
     return rpm;
 }
 
-namespace API {
-    void init() {
-    }
+void global_init()
+{
+}
+
+void global_read_tofs()
+{
+}
+
+TOF_Reading global_get_tof(TOF_Direction direction)
+{
+    printf(">>> readTOF %d\n", direction);
+    fflush(stdout);
+
+    TOF_Reading reading;
+    reading.distance = 0;
+    
+    char valid_char;
+    scanf("%f %c", &reading.distance, &valid_char);
+
+    reading.valid = (valid_char == 't' || valid_char == 'T');
+
+    return reading;
 }

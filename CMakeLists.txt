@@ -23,7 +23,7 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico_w CACHE STRING "Board type")
+set(PICO_BOARD pico CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
@@ -43,7 +43,7 @@ target_compile_definitions(SourceCode PRIVATE EIGEN_NO_DEBUG=1 EIGEN_NO_EXCEPTIO
 target_include_directories(SourceCode PRIVATE ${CMAKE_CURRENT_LIST_DIR}/eigen)
 
 pico_set_program_name(SourceCode "SourceCode")
-pico_set_program_version(SourceCode "0.1")
+pico_set_program_version(SourceCode "1.0")
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(SourceCode 0)
@@ -54,7 +54,6 @@ target_link_libraries(SourceCode
         pico_stdlib
         pico_stdio_usb
         hardware_i2c
-        pico_cyw43_arch_none
         hardware_pwm
         )
 
