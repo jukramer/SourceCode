@@ -235,21 +235,27 @@ class TakeMySelfControl(QMainWindow):
             
             self.recalculate()
 
+            run_cmd = self.mission.run_command
+            dir = self.mission.directory
+            run_cmd = os.path.join(dir, run_cmd)
+            self.text_box.write("Running command: " + run_cmd + "\n\n")
+            if not os.path.exists(run_cmd):
+                self.text_box.write("Path not found.\n")
+                return
+            
             self.running = True
             build_button.setEnabled(False)
             run_button.setEnabled(False)
             stop_button.setEnabled(True)
 
-            run_cmd = self.mission.run_command
-            dir = self.mission.directory
-            self.text_box.write("Running command: " + run_cmd + "\n\n")
-            
             build_status.setText("Running...")
             build_status.setStyleSheet("color: green;")
 
             def worker():
+                print("Started pros", self.run_thread, self.process)
+
+                self.should_stop = False
                 try:
-                    self.should_stop = False
                     if platform.system() == "Darwin":
                         self.process = subprocess.Popen(
                             run_cmd,
@@ -261,7 +267,7 @@ class TakeMySelfControl(QMainWindow):
                             text=True,
                             preexec_fn=os.setsid
                         )
-                    else: 
+                    else:     
                         self.process = subprocess.Popen(
                             run_cmd,
                             shell=True,
@@ -277,12 +283,15 @@ class TakeMySelfControl(QMainWindow):
                         output_buffer = []
                         # Adjust these values based on desired responsiveness vs. performance
                         
-                        MAX_BUFFER_LINES = 20  # Max lines to buffer before an update
+                        MAX_BUFFER_LINES = 1  # Max lines to buffer before an update
                         MAX_BUFFER_TIME_S = 0.1 # Max time (e.g., 100ms) before forcing an update
                         
                         last_emit_time = time.monotonic()
 
+                        print("stream!")
+
                         for line in iter(stream.readline, ''): # line usually includes newline
+                            print("afawfwa", line)
                             if self.should_stop:
                                 break
 
@@ -376,6 +385,7 @@ class TakeMySelfControl(QMainWindow):
                             else:
                                 # --- Regular line: add to buffer ---
                                 output_buffer.append(line)
+                                print(line, end="")
 
                             current_time = time.monotonic()
                             if (len(output_buffer) >= MAX_BUFFER_LINES or (current_time - last_emit_time) >= MAX_BUFFER_TIME_S):
@@ -390,7 +400,6 @@ class TakeMySelfControl(QMainWindow):
                             output_buffer.clear()
 
                     stdout_thread = threading.Thread(target=read_stream, args=(self.process.stdout,))
-
                     stdout_thread.start()
                     stdout_thread.join()
 
@@ -398,11 +407,13 @@ class TakeMySelfControl(QMainWindow):
                     self.process.wait()
                     self.process = None
                 except Exception as e:
+                    print(f"EXCEPTION in worker(): {e}")
                     self.text_box.write(f"Exception running command: {e}\n")
-
+                    
                 on_run_complete()
 
-            self.run_thread = threading.Thread(target=worker, daemon=True).start()
+            self.run_thread = threading.Thread(target=worker, daemon=True)
+            self.run_thread.start()
 
         run_button.clicked.connect(run)
 

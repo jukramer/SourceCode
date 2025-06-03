@@ -240,6 +240,7 @@ std::pair<int, int> controlLoop(float vTarget, float wTarget)
 
 inline Pose getCurrentPose() {
     // Get current pose
+    printf("Current Pose: %f %f %f %f %f\n", POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w);
     double x = POSE.x;
     double y = POSE.y;
     double theta = POSE.theta;
@@ -250,11 +251,15 @@ inline Pose getCurrentPose() {
     double dPos = (posL + posR)/2;
     double dTheta = (posR - posL)/WHEEL_BASE;
 
+    printf("Pos updates: dPos: %f dTheta: %f\n", dPos, dTheta);
+
     // Update pose
     x += dPos*cos(POSE.theta);
     y += dPos*cos(POSE.theta);
     theta += dTheta;
     Pose newPose = {x, y, theta, POSE.v, POSE.w};
+
+    printf("New pose: %f %f %f %f %f\n", newPose.x, newPose.y, newPose.theta, newPose.v, newPose.w);
 
     return newPose;
 }
@@ -332,7 +337,7 @@ int main()
 
     while (true)
     {
-        global_read_tofs();
+        // global_read_tofs();
 
         // auto reading = global_get_tof(TOF_Direction::FRONT);
         // printf("TOF Front: %f Valid: %d\n", reading.distance, (int)reading.valid);
@@ -341,6 +346,7 @@ int main()
 
         if (stdio_usb_connected())
         {
+            ;
             /*std::vector<Command> commands = stateMachineSimple("FFLRFF");
 
             for (Command command : commands)

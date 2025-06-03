@@ -525,7 +525,7 @@ class Mouse(Body):
         self.left_pos += abs(self.left_rpm * circ / 60 * dt / SCALE)
         self.right_pos += abs(self.right_rpm * circ / 60 * dt / SCALE)
 
-        print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}, left pos: {self.left_pos}, right pos: {self.right_pos} dt: {dt}")
+        # print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}, left pos: {self.left_pos}, right pos: {self.right_pos} dt: {dt}")
 
         v = (self.left_rpm + self.right_rpm) / 2 * circ / 60
         omega = (self.right_rpm - self.left_rpm) * circ / (60 * wb)
