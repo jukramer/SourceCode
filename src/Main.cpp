@@ -1,0 +1,392 @@
+#include "API.h"
+
+// Controller Constants
+#define KP_V 200.0 // Velocity controller
+#define KI_V 40.0
+#define KD_V 5.32089706902006
+#define KP_W 50.0 // Angular velocity controller
+#define KI_W 5.0
+#define KD_W 0.238664893739785
+
+#define V_MAX 2.0
+#define W_MAX 3.0
+
+class VController
+{
+public:
+    double ePrev = 0;
+    double eTot = 0;
+
+    double Kp;
+    double Ki;
+    double Kd;
+
+    // int tPrev;
+    int64_t tPrev;
+    // int64_t tPrev;
+
+    VController(double Kp, double Ki, double Kd)
+    {
+        this->Kp = Kp;
+        this->Ki = Ki;
+        this->Kd = Kd;
+
+        tPrev = time_us_64();
+    }
+
+    double output(double vRef, double vCurrent)
+    {
+        double e = vRef - vCurrent;
+        int t = time_us_64();
+
+        double dt = (t - tPrev) / 1000000.0;
+
+        // std::cout<<"dt: "<<dt<<"Current time: "<<t<<" Previous time: "<<tPrev<<std::endl;
+        // std::cout<<"eTot: "<<eTot<<std::endl;
+        eTot += e * dt;
+
+        double output = Kp * e + Ki * eTot + Kd * (e - ePrev) / dt;
+        tPrev = t;
+
+        ePrev = e;
+        return output;
+    }
+};
+
+class WController
+{
+public:
+    double ePrev = 0;
+    double eTot = 0;
+
+    double Kp;
+    double Ki;
+    double Kd;
+
+    int64_t tPrev;
+
+    WController(double Kp, double Ki, double Kd)
+    {
+        this->Kp = Kp;
+        this->Ki = Ki;
+        this->Kd = Kd;
+
+        tPrev = time_us_64();
+    }
+
+    double output(double wRef, double wCurrent)
+    {
+        double e = wRef - wCurrent;
+        int t = time_us_64();
+        double dt = (t - tPrev) / 1000000;
+        eTot += e * dt;
+        double output = Kp * e + Ki * eTot;
+        ePrev = e;
+        return output;
+    }
+};
+
+void motorTest(Motor &Motor)
+{
+    if (stdio_usb_connected())
+    {
+        printf("Forward...\n");
+        Motor.setPWM(255);
+        sleep_ms(100);
+        int rpm1 = Motor.readRPM();
+        sleep_ms(50);
+        int rpm2 = Motor.readRPM();
+        sleep_ms(500);
+        Motor.readRPM();
+        sleep_ms(10);
+        int rpm3 = Motor.readRPM();
+        printf("RPM1: %d RPM2: %d RPM3: %d\n", rpm1, rpm2, rpm3);
+        sleep_ms(300);
+        printf("Stopping...\n");
+        Motor.setPWM(0);
+        sleep_ms(1000);
+
+        printf("Backward...\n");
+        Motor.setPWM(-255);
+        sleep_ms(300);
+
+        printf("Stopping...\n");
+        Motor.setPWM(0);
+        sleep_ms(1000);
+    }
+    else
+    {
+        Motor.setPWM(0);
+    }
+}
+
+std::pair<int, int> controlLoop(VController &VContr, WController &WContr, Motor &MotorL, Motor &MotorR, float vTarget, float wTarget)
+{
+    float rpmCurrentL = MotorL.readRPM();
+    float rpmCurrentR = MotorR.readRPM();
+    float vCurrentL = rpmCurrentL * WHEEL_RADIUS / 60;
+    float vCurrentR = rpmCurrentR * WHEEL_RADIUS / 60;
+    float vCurrentAVG = (vCurrentL + vCurrentR) / 2;
+    float wCurrent = (vCurrentR - vCurrentL) / WHEEL_BASE;
+
+    double vOut = VContr.output(vTarget, vCurrentAVG);
+    double wOut = WContr.output(wTarget, wCurrent);
+
+    printf("VOut: %f WOut: %f rpmL: %f rpmR: %f vL: %f vR: %f W: %f\n", vOut, wOut, rpmCurrentL, rpmCurrentR, vCurrentL, vCurrentR, wCurrent);
+
+    int dutyL = int(std::max(std::min((vOut - wOut), 220.0), 0.0));
+    int dutyR = int(std::max(std::min((vOut + wOut), 220.0), 0.0));
+
+    return {dutyL, dutyR};
+}
+
+int main()
+{
+    API::init();
+
+    VController VContr(KP_V, KI_V, KD_V);
+    WController WContr(KP_W, KI_W, KD_W);
+
+    Motor MotorL(Motor_Choice::LEFT);
+    Motor MotorR(Motor_Choice::RIGHT);
+
+    double vtarg = 5;
+    double vout1 = VContr.output(vtarg, 0);
+    double vout2 = VContr.output(vtarg, 2);
+    double vout3 = VContr.output(vtarg, 3);
+
+    double wout1 = WContr.output(vtarg, 0);
+    double wout2 = WContr.output(vtarg, 2);
+    double wout3 = WContr.output(vtarg, 3);
+
+    while (true)
+    {
+        if (stdio_usb_connected())
+        {
+            auto [pwmL, pwmR] = controlLoop(VContr, WContr, MotorL, MotorR, 2, 0);
+            MotorL.setPWM(pwmL);
+            MotorR.setPWM(pwmR);
+            printf("Duty Left: %d Duty Right: %d\n", pwmL, pwmR);
+        }
+        else
+        {
+            MotorL.setPWM(0);
+            MotorR.setPWM(0);
+        }
+    }
+}
+
+// printf("VOut1: %f VOut2: %f VOut3: %f\nWOut1: %f WOut2: %f WOut3: %f", vout1, vout2, vout3, wout1, wout2, wout3);
+
+// while (true) {
+//     // motorTest(MotorL);
+//     // motorTest(MotorR);
+//     if(stdio_usb_connected()) {
+//         // motorTest(MotorR);
+//         // motorTest(MotorL);
+//         MotorL.setPWM(255, FORWARD);
+//         MotorR.setPWM(255, FORWARD);
+//         sleep_ms(100);
+//         printf("RPM: %f, %f", MotorL.readRPM(), MotorR.readRPM());
+//     } else {
+//         MotorR.setPWM(0, FORWARD);
+//         MotorL.setPWM(0, FORWARD);
+//     }
+
+// double dutyL, dutyR = controlLoop(VContr, WContr, mouse, MotorL, MotorR, 1000, 0);
+// double rpmL = MotorL.readRPM();
+// double rpmR = MotorR.readRPM();
+// printf("Duty L: %f Duty R: %f\n", dutyL, dutyR);
+// printf("RPM Left: %f RPM Right: %f\n", rpmL, rpmR);
+// MotorL.setPWM(dutyL, FORWARD);
+// MotorR.setPWM(dutyR, FORWARD);
+
+// gpio_put(dirA1Pin, 1);
+// gpio_put(dirA2Pin, 0);
+// analogWrite(spdAPin, 200);
+
+// double out = VContr.output(1000, 0);
+
+/*
+
+// Global State Machine
+while (true)
+{
+    if (mouse.state == INIT)
+    {
+        // stdio_init_all();
+        // for (int i = 0; i < 27; i++){
+        //     gpio_init(allPins[i]);
+        //     gpio_set_dir(allPins[i], GPIO_OUT);
+        // }
+        mouse.state = IDLE;
+    }
+    else if (mouse.state == IDLE)
+    {
+        mouse.state = MAP_FLOODFILL;
+    }
+    else if (mouse.state == MAP_FLOODFILL || mouse.state == MAP_FLOODFILL_BACK)
+    {
+        scanWalls(mouse);
+        floodFill(mouse);
+
+        Direction minFloodFillDirection;
+        int minFloodFill = 255;
+
+        int x = mouse.cellPos.x;
+        int y = mouse.cellPos.y;
+
+        uint8_t mask = moveMask[y][x];
+        for (int i = 0; i < 4; ++i) {
+            if (!(mask & (1 << i))) continue;
+
+            int nx = x + DIRECTIONS[i].x;
+            int ny = y + DIRECTIONS[i].y;
+
+            if (floodMatrix[ny][nx] <= minFloodFill)
+            {
+                minFloodFill = floodMatrix[ny][nx];
+                minFloodFillDirection = (Direction)i;
+            }
+        }
+
+        // std::cout << "Flood fill direction: " << minFloodFillDirection << std::endl;
+        // std::cout << "Flood fill value: " << minFloodFill << std::endl;
+
+        mouse.move(minFloodFillDirection);
+
+        if (floodMatrix[mouse.cellPos.y][mouse.cellPos.x] == 0)
+        {
+            if (mouse.state == MAP_FLOODFILL)
+            {
+                std::cout << "Reached goal! Backing..." << std::endl;
+                mouse.state = MAP_FLOODFILL_BACK;
+            } else if (mouse.state == MAP_FLOODFILL_BACK)
+            {
+                if (mouse.cellPos.x == 0 && mouse.cellPos.y == MAZE_SIZE - 1)
+                {
+                    std::cout << "Reached start! Stopping..." << std::endl;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+    for (int y = 0; y < MAZE_SIZE; y++)
+{
+    for (int x = 0; x < MAZE_SIZE; x++)
+    {
+        uint8_t mask = 0b1111;
+
+        if (y == 0)
+            mask &= ~(1 << TOP);
+        if (x == MAZE_SIZE - 1)
+            mask &= ~(1 << RIGHT);
+        if (y == MAZE_SIZE - 1)
+            mask &= ~(1 << BOTTOM);
+        if (x == 0)
+            mask &= ~(1 << LEFT);
+
+        moveMask[y][x] = mask;
+    }
+}
+
+ //
+// Main loop
+//
+
+// TOF_XL.startContinuous(50); // Start continuous ranging with 50ms period
+
+for (int i = 0; i < 4; i++)
+{
+    TOF_XS[i].startRangeContinuous(50);
+}
+
+/**
+ *         for (int i = 0; i < 0; i++)
+    {
+        if (TOF_XS[i].isRangeComplete())
+        {
+            mm[i] = TOF_XS[i].readRangeResult();
+        }
+
+        // float lux = TOF_XS[i].readLux(VL6180X_ALS_GAIN_5);
+        // uint8_t range = TOF_XS[i].readRange();
+        // uint8_t status = TOF_XS[i].readRangeStatus();
+        // printf("Sensor %d - Lux: %.2f, Range: %d mm, Status: %d, ", i, lux, range, status);
+
+        // printf("%d: Range: %d mm | ", i, mm[i]);
+    }
+
+            if (TOF_XL.readRangeContinuousMillimeters())
+    {
+        mmXL = TOF_XL.readRangeContinuousMillimeters();
+        printf("XL Range: %d mm ", (int)mmXL);
+    }
+
+uint8_t mm[4] = {};
+float mmXL = 0;
+
+auto t_prev = time_us_64();
+auto t_end_calib = t_prev + 3000000; // 3s calibration
+
+int calib_samples = 0;
+bool calibrated = false;
+
+filter.initWithAcc(0.0f, 0.0f, 0.0f);
+Vector3f accel_bias, gyro_bias;
+
+while (true)
+{
+    auto t1 = time_us_64();
+
+    uint16_t len = 128;
+    mpu6500_fifo_read(gs_accel_raw, gs_accel_g, gs_gyro_raw, gs_gyro_dps, &len);
+    auto t2 = time_us_64();
+
+    float dt = (t2 - t_prev) / 1e6f;
+    t_prev = t2;
+
+    Vector3f accel_raw(gs_accel_g[0][0], gs_accel_g[0][1], gs_accel_g[0][2]);
+    Vector3f gyro_raw(gs_gyro_dps[0][0], gs_gyro_dps[0][1], gs_gyro_dps[0][2]);
+
+    if (!calibrated)
+    {
+        accel_raw[2] -= 1.0f; // Remove gravity from Z axis
+
+        accel_bias += accel_raw;
+        gyro_bias += gyro_raw;
+        calib_samples++;
+
+        if (t2 > t_end_calib)
+        {
+            accel_bias *= (1.0f / calib_samples);
+            gyro_bias *= (1.0f / calib_samples);
+            calibrated = true;
+        }
+
+        continue;
+    }
+
+    accel_raw -= accel_bias;
+    gyro_raw -= gyro_bias;
+
+    filter.predict(dt);
+    filter.correctGyr(gyro_raw[0], gyro_raw[1], gyro_raw[2]);
+    filter.correctAcc(accel_raw[0], accel_raw[1], accel_raw[2]);
+
+    float roll, pitch, yaw;
+    filter.getAttitude(roll, pitch, yaw);
+
+    printf("Roll: %.2f, Pitch: %.2f, Yaw: %.2f | "
+           "Accel: [%.2f, %.2f, %.2f] m/s^2 | "
+           "Gyro: [%.2f, %.2f, %.2f] rad/s | "
+           "dt: %.3f s\n",
+           roll * (180.0 / M_PI), pitch * (180.0 / M_PI), yaw * (180.0 / M_PI),
+           accel_raw[0], accel_raw[1], accel_raw[2],
+           gyro_raw[0], gyro_raw[1], gyro_raw[2],
+           dt);
+
+}
+*/
