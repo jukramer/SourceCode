@@ -47,6 +47,8 @@ void c2_callback(uint gpio, uint32_t events)
 
 Motor::Motor(Motor_Choice choice)
 {
+    this->choice = choice;
+
     int pinForward = choice == Motor_Choice::LEFT ?  dirA1Pin : dirB1Pin;
     int pinBackward = choice == Motor_Choice::LEFT ? dirA2Pin : dirB2Pin;
     int pinPWM = choice == Motor_Choice::LEFT ? spdAPin : spdBPin;
@@ -72,12 +74,12 @@ Motor::Motor(Motor_Choice choice)
     irq_set_enabled(IO_IRQ_BANK0, true);
 }
 
-int Motor::setPWM(int PWM)
+void Motor::setPWM(float PWM)
 {
     printf("Setting PWM...\n");
 
     int dir = FORWARD;
-    if (PWM < 0)
+    if (PWM < 0.0)
     {
         dir = BACKWARD;
         PWM = -PWM; // Make PWM positive
@@ -86,6 +88,14 @@ int Motor::setPWM(int PWM)
     {
         dir = FORWARD;
     }
+
+    if (PWM > 100.0) {
+        PWM = 100.0;
+        printf("Invalid PWM value. Capped to 100 magnitude max.\n");
+    }
+
+    // Scale PWM from 0 to 100 to 45 to 255
+    int actualPWM = (PWM * 210) / 100 + 45;
 
     this->dir = dir;
     if (dir == FORWARD)
@@ -99,14 +109,11 @@ int Motor::setPWM(int PWM)
         gpio_put(pinBackward, 1);
     }
 
-    if (PWM > 255 || PWM < 0)
+    if (actualPWM > 255 || actualPWM < 0)
     {
-        printf("Invalid PWM\n");
-        return -1;
+        printf("Invalid PWM calculated...\n");
     }
-
-    analogWrite(pinPWM, PWM);
-    return 1;
+    analogWrite(pinPWM, actualPWM);
 }
 
 float Motor::readRPM()
