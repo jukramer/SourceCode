@@ -177,7 +177,7 @@ class TakeMySelfControl(QMainWindow):
 
         self.console_text_box = QPlainTextEdit(self)
         
-        if sys.platform == "darwin":
+        if sys.platform == "Darwin":
             font = QFont("Monaco", 10)
         else:
             font = QFont("Courier", 10)
@@ -248,16 +248,28 @@ class TakeMySelfControl(QMainWindow):
             def worker():
                 try:
                     self.should_stop = False
-                    self.process = subprocess.Popen(
-                        run_cmd,
-                        shell=True,
-                        cwd=dir,
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                        preexec_fn=os.setsid
-                    )
+                    if platform.system() == "Darwin":
+                        self.process = subprocess.Popen(
+                            run_cmd,
+                            shell=True,
+                            cwd=dir,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            preexec_fn=os.setsid
+                        )
+                    else: 
+                        self.process = subprocess.Popen(
+                            run_cmd,
+                            shell=True,
+                            cwd=dir,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                        )
 
                     def read_stream(stream):
                         output_buffer = []
@@ -357,7 +369,10 @@ class TakeMySelfControl(QMainWindow):
             if self.process:
                 try:
                     self.should_stop = True
-                    os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+                    if platform.system() == "Darwin":
+                        os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+                    else:
+                        self.process.send_signal(signal.CTRL_BREAK_EVENT)
                     self.process.wait()
                 except Exception as e:
                     self.text_box.write(f"Error stopping process: {e}\n")
