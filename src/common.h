@@ -63,7 +63,7 @@ struct Command {
     int value; // 3, 90...
 };
 
-std::vector<Command> stateMachineSimple(const std::string);
+std::vector<Command> stateMachineSimple(const std::string &path);
 
 class Location
 {

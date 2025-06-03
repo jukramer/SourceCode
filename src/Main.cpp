@@ -247,6 +247,9 @@ int main()
         {
             std::vector<Command> commands = stateMachineSimple("FFLRFF");
 
+            for (Command command : commands) {
+                printf("%s %f ", command.action, command.value);
+            }
 
             // auto [pwmL, pwmR] = controlLoop(VContr, WContr, MotorL, MotorR, 2, 0);
             // MotorL.setPWM(pwmL);

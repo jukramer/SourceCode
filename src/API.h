@@ -29,7 +29,7 @@ public:
 
     Motor(Motor_Choice choice);
 
-    void setPWM(int PWM);
+    void setPWM(float PWM);
     float readRPM();
 };
 
