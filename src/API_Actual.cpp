@@ -17,12 +17,8 @@
 #include "drivers/driver_mpu6500_fifo.h"
 
 // Motor Constants/Variables
-#define FORWARD 1
-#define BACKWARD -1
 #define TICKS_PER_REV 7.0
 #define GEAR_RATIO 30.0
-#define WHEEL_RADIUS 21.5
-#define WHEEL_BASE 0.076
 
 volatile uint totalTicksL = 0;
 volatile uint totalTicksR = 0;
@@ -37,7 +33,7 @@ void c1_callback(uint gpio, uint32_t events)
 {
     if (events & GPIO_IRQ_EDGE_RISE)
     {
-        totalTicksL++; // Or -- if in reverse
+        totalTicksL += 1; // Or -- if in reverse
     }
 }
 
@@ -45,106 +41,98 @@ void c2_callback(uint gpio, uint32_t events)
 {
     if (events & GPIO_IRQ_EDGE_RISE)
     {
-        totalTicksR++; // Or -- if in reverse
+        totalTicksR += 1; // Or -- if in reverse
     }
 }
 
-class Motor
+Motor::Motor(Motor_Choice choice)
 {
-public:
-    int PWM = 0;
-    int currentRPM = 0;
+    int pinForward = choice == Motor_Choice::LEFT ?  dirA1Pin : dirB1Pin;
+    int pinBackward = choice == Motor_Choice::LEFT ? dirA2Pin : dirB2Pin;
+    int pinPWM = choice == Motor_Choice::LEFT ? spdAPin : spdBPin;
+    int pinENC = choice == Motor_Choice::LEFT ? mrencPin : mlencPin;
+    const volatile uint *totalTicks = choice == Motor_Choice::LEFT ? &totalTicksL : &totalTicksR;
+    gpio_irq_callback_t callback = choice == Motor_Choice::LEFT ? &c1_callback : &c2_callback;
 
-    const volatile uint *totalTicks;
-    uint prevTicks;
+    tPrev = time_us_64();
 
-    int dir = FORWARD; // forward = 1, backward = -1
-    int pinForward;
-    int pinBackward;
-    int pinPWM;
-    int pinENC;
-    double prevRPM;
-    uint64_t tPrev;
+    this->pinForward = pinForward;
+    this->pinBackward = pinBackward;
+    this->pinPWM = pinPWM;
+    this->pinENC = pinENC;
 
-    Motor(int pinForward, int pinBackward, int pinPWM, int pinENC, const volatile uint *totalTicks, gpio_irq_callback_t callback)
+    this->totalTicks = totalTicks;
+    this->prevTicks = prevTicks;
+
+    gpio_init(pinENC);
+    gpio_set_dir(pinENC, GPIO_IN);
+    gpio_pull_up(pinENC);
+
+    gpio_set_irq_enabled_with_callback(pinENC, GPIO_IRQ_EDGE_RISE, true, callback);
+    irq_set_enabled(IO_IRQ_BANK0, true);
+}
+
+int Motor::setPWM(int PWM)
+{
+    printf("Setting PWM...\n");
+
+    int dir = FORWARD;
+    if (PWM < 0)
     {
-        tPrev = time_us_64();
-
-        this->pinForward = pinForward;
-        this->pinBackward = pinBackward;
-        this->pinPWM = pinPWM;
-        this->pinENC = pinENC;
-
-        this->totalTicks = totalTicks;
-        this->prevTicks = prevTicks;
-
-        initEncoder(callback);
+        dir = BACKWARD;
+        PWM = -PWM; // Make PWM positive
+    }
+    else
+    {
+        dir = FORWARD;
     }
 
-    int setPWM(int PWM, int dir)
+    this->dir = dir;
+    if (dir == FORWARD)
     {
-        printf("Setting PWM...\n");
-        this->dir = dir;
-        if (dir == FORWARD)
-        {
-            gpio_put(pinForward, 1);
-            gpio_put(pinBackward, 0);
-        }
-        else if (dir == BACKWARD)
-        {
-            gpio_put(pinForward, 0);
-            gpio_put(pinBackward, 1);
-        }
-
-        if (PWM > 255 || PWM < 0)
-        {
-            printf("Invalid PWM\n");
-            return -1;
-        }
-
-        analogWrite(pinPWM, PWM);
-        return 1;
+        gpio_put(pinForward, 1);
+        gpio_put(pinBackward, 0);
+    }
+    else if (dir == BACKWARD)
+    {
+        gpio_put(pinForward, 0);
+        gpio_put(pinBackward, 1);
     }
 
-    int initEncoder(gpio_irq_callback_t callback)
+    if (PWM > 255 || PWM < 0)
     {
-        printf("Starting encoder...\n");
-        gpio_init(pinENC);
-        gpio_set_dir(pinENC, GPIO_IN);
-        gpio_pull_up(pinENC);
-
-        gpio_set_irq_enabled_with_callback(pinENC, GPIO_IRQ_EDGE_RISE, true, callback);
-        irq_set_enabled(IO_IRQ_BANK0, true);
-        printf("Encoder finished!\n");
-
-        return 0;
+        printf("Invalid PWM\n");
+        return -1;
     }
 
-    float readRPM()
+    analogWrite(pinPWM, PWM);
+    return 1;
+}
+
+float Motor::readRPM()
+{
+    uint64_t now = time_us_64();
+
+    double pulses = double(*totalTicks - prevTicks);
+    printf("Pulses: %d, ticks: %d, prev ticks: %d ", pulses, *totalTicks, prevTicks);
+    prevTicks = *totalTicks;
+
+    float dt_us = (now - tPrev);
+    printf("tNow: %lld tPrev: %lld dt: %f\n", now, tPrev, dt_us);
+
+    tPrev = now;
+
+    if (dt_us > 0)
     {
-        uint64_t now = time_us_64();
-
-        double pulses = double(*totalTicks - prevTicks);
-        printf("Pulses: %d, ticks: %d, prev ticks: %d ", pulses, *totalTicks, prevTicks);
-        prevTicks = *totalTicks;
-
-        float dt_us = (now - tPrev);
-        printf("tNow: %lld tPrev: %lld dt: %f\n", now, tPrev, dt_us);
-
-        tPrev = now;
-
-        if (dt_us > 0)
-        {
-            // float rps = (pulses / TICKS_PER_REV) * (1000000.0f / dt_us) / GEAR_RATIO;
-            float rpm = (pulses / TICKS_PER_REV) * (60000000.0f / dt_us) / GEAR_RATIO; // Convert to RPM
-            printf("RPM reading is: %f\n", rpm);
-            prevRPM = rpm;
-            return rpm;
-        }
-
-        return 0.0;
+        // float rps = (pulses / TICKS_PER_REV) * (1000000.0f / dt_us) / GEAR_RATIO;
+        float rpm = (pulses / TICKS_PER_REV) * (60000000.0f / dt_us) / GEAR_RATIO; // Convert to RPM
+        printf("RPM reading is: %f\n", rpm);
+        prevRPM = rpm;
+        return rpm;
     }
-};
+
+    return 0.0;
+}
 
 uint pwm_setup(uint gpio)
 {
@@ -206,7 +194,7 @@ static float gs_gyro_dps[128][3];
 
 namespace API
 {
-    bool init()
+    void init()
     {
         stdio_init_all();
 

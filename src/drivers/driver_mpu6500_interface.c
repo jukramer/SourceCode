@@ -35,8 +35,9 @@
  */
 
 #include "driver_mpu6500_interface.h"
-#include "i2c.h"
 #include "hardware/gpio.h"
+
+#include "../i2c.h"
 
 #include <stdarg.h>
 

@@ -27,7 +27,6 @@ set(PICO_BOARD pico_w CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
-add_subdirectory(eigen)
 
 project(SourceCode C CXX ASM)
 set(CMAKE_CXX_STANDARD 23)
@@ -38,7 +37,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(SourceCode ActualSourceCode.cpp vl6180x.cpp driver_mpu6500.c driver_mpu6500_fifo.c driver_mpu6500_interface.c vl53l0x.cpp)
+add_executable(SourceCode src/Main.cpp src/API_Actual.cpp src/drivers/vl6180x.cpp src/drivers/driver_mpu6500.c src/drivers/driver_mpu6500_fifo.c src/drivers/driver_mpu6500_interface.c src/drivers/vl53l0x.cpp)
 
 target_compile_definitions(SourceCode PRIVATE EIGEN_NO_DEBUG=1 EIGEN_NO_EXCEPTIONS)
 target_include_directories(SourceCode PRIVATE ${CMAKE_CURRENT_LIST_DIR}/eigen)

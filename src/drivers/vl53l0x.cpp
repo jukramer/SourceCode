@@ -4,7 +4,8 @@
 // VL53L0X datasheet.
 
 #include "vl53l0x.h"
-#include "i2c.h"
+
+#include "../i2c.h"
 
 #include <stdio.h>
 

@@ -1,8 +1,8 @@
 #include <stdio.h>
 
+#include "../i2c.h"
+
 #include "vl6180x.h"
-#include "i2c.h"
-#include "hardware/i2c.h"
 
 // Read 1 byte from the VL6180X at 'reg'
 uint8_t Adafruit_VL6180X::read8(uint16_t reg)
