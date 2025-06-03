@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <vector>
 #include <string>
 
 typedef unsigned int uint;
@@ -53,6 +54,16 @@ enum Heading
 #define MAZE_SIZE 16
 #define MAZE_CELL_COUNT (MAZE_SIZE * MAZE_SIZE)
 #define MAX_COST (MAZE_CELL_COUNT - 1)
+
+using string = const char *;
+
+
+struct Command {
+    string action; // FWD, SS, STOP
+    int value; // 3, 90...
+};
+
+std::vector<Command> stateMachineSimple(const std::string);
 
 class Location
 {
@@ -107,6 +118,13 @@ enum WallState
 {
     EXIT = 0,    // a wall that has been seen and confirmed absent
     WALL = 1,    // a wall that has been seen and confirmed present
+};
+
+struct StatePrediction
+{
+    double x;
+    double y;
+    double theta;
 };
 
 struct Cell

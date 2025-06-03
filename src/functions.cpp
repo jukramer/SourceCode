@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <string>
+#include "common.h"
 
 /////////////// DEFINITIONS /////////////////////
 // States
@@ -36,11 +37,11 @@ int manhattanDist(std::vector<int> cell1, std::vector<std::vector<int>> cells)
 }
 
 
-std::vector<std::string> stateMachineSimple(const std::string &path)
+std::vector<Command> stateMachineSimple(const std::string &path)
 {
     int n;
     int state = START;
-    std::vector<std::string> output;
+    std::vector<Command> output;
 
     for (char c : path) {
         std::cout << c << " State: " << state << std::endl;
@@ -60,18 +61,34 @@ std::vector<std::string> stateMachineSimple(const std::string &path)
             }
             else if (c == 'L')
             {
-                output.push_back("FWD" + std::to_string(n));
+                // output.push_back("FWD" + std::to_string(n));
+                Command com;
+                com.action = "FWD";
+                com.value = n;
+                output.push_back(com);
                 state = ORTHO_L;
             }
             else if (c == 'R')
             {
-                output.push_back("FWD" + std::to_string(n));
+                // output.push_back("FWD" + std::to_string(n));
+                Command com;
+                com.action = "FWD";
+                com.value = n;
                 state = ORTHO_R;
             }
             else if (c == 'S')
             {
-                output.push_back("FWD" + std::to_string(n));
-                output.push_back("STOP");
+                // output.push_back("FWD" + std::to_string(n));
+                // output.push_back("STOP");
+                Command com1;
+                com1.action = "FWD";
+                com1.value = n;
+                output.push_back(com1);
+
+                Command com2;
+                com2.action = "STOP";
+                com2.value = 0;
+                output.push_back(com2);
             }
             break;
 
@@ -79,25 +96,60 @@ std::vector<std::string> stateMachineSimple(const std::string &path)
             if (c == 'F')
             {
                 n = 2;
-                output.push_back("SS90EL");
+                // output.push_back("SS90EL");
+                Command com;
+                com.action = "TRN";
+                com.value = 90;
+                output.push_back(com);
                 state = ORTHO;
             }
             else if (c == 'L')
             {
-                output.push_back("SS90EL");
-                output.push_back("FWD1");
+                // output.push_back("SS90EL");
+                Command com1;
+                com1.action = "TRN";
+                com1.value = 90;
+                output.push_back(com1);
+                Command com2;
+                com2.action = "FWD";
+                com2.value = 1;
+                // output.push_back("FWD1");
+                output.push_back(com2);
             }
             else if (c == 'R')
             {
-                output.push_back("SS90EL");
-                output.push_back("FWD1");
+                // output.push_back("SS90EL");
+                Command com1;
+                com1.action = "TRN";
+                com1.value = 90;
+                output.push_back(com1);
+                Command com2;
+                com2.action = "FWD";
+                com2.value = 1;
+                // output.push_back("FWD1");
+                output.push_back(com2);
                 state = ORTHO_R;
             }
             else if (c == 'S')
             {
-                output.push_back("SS90EL");
-                output.push_back("FWD1");
-                output.push_back("STOP");
+                Command com1;
+                com1.action = "TRN";
+                com1.value = 90;
+                output.push_back(com1);
+
+                Command com2;
+                com1.action = "FWD";
+                com1.value = 1;
+                output.push_back(com2);
+                
+                Command com3;
+                com1.action = "STOP";
+                com1.value = 0;
+                output.push_back(com3);
+
+                // output.push_back("SS90EL");
+                // output.push_back("FWD1");
+                // output.push_back("STOP");
             }
             break;
 
@@ -105,25 +157,64 @@ std::vector<std::string> stateMachineSimple(const std::string &path)
             if (c == 'F')
             {
                 n = 2;
-                output.push_back("SS90ER");
+                Command com;
+                com.action = "TRN";
+                com.value = -90;
+                output.push_back(com);
+
+                // output.push_back("SS90ER");
                 state = ORTHO;
             }
+
             else if (c == 'L')
             {
-                output.push_back("SS90ER");
-                output.push_back("FWD1");
+                Command com1;
+                com1.action = "TRN";
+                com1.value = -90;
+                output.push_back(com1);
+
+                Command com2;
+                com2.action = "FWD";
+                com2.value = 1;
+                output.push_back(com2);
+                // output.push_back("SS90ER");
+                // output.push_back("FWD1");
                 state = ORTHO_L;
             }
             else if (c == 'R')
             {
-                output.push_back("SS90ER");
-                output.push_back("FWD1");
+                Command com1;
+                com1.action = "TRN";
+                com1.value = -90;
+                output.push_back(com1);
+                Command com2;
+                com2.action = "FWD";
+                com2.value = 1;
+
+                output.push_back(com2);
+                // output.push_back("SS90ER");
+                // output.push_back("FWD1");
             }
             else if (c == 'S')
             {
-                output.push_back("SS90ER");
-                output.push_back("FWD1");
-                output.push_back("STOP");
+                Command com1;
+                com1.action = "TRN";
+                com1.value = -90;
+                output.push_back(com1);
+
+                Command com2;
+                com1.action = "FWD";
+                com1.value = 1;
+                output.push_back(com2);
+                
+                Command com3;
+                com1.action = "STOP";
+                com1.value = 0;
+                output.push_back(com3);
+
+                // output.push_back("SS90ER");
+                // output.push_back("FWD1");
+                // output.push_back("STOP");
             }
             break;
         }

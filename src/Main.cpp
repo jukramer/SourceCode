@@ -1,4 +1,6 @@
 #include "API.h"
+#include "common.h"
+#include <vector>
 
 // Controller Constants
 #define KP_V 200.0 // Velocity controller
@@ -7,6 +9,9 @@
 #define KP_W 50.0 // Angular velocity controller
 #define KI_W 5.0
 #define KD_W 0.238664893739785
+#define KP_S 1.0 // Steering controller
+#define KI_S 1.0
+#define KD_S 0.0 
 
 #define V_MAX 2.0
 #define W_MAX 3.0
@@ -34,7 +39,7 @@ public:
         tPrev = time_us_64();
     }
 
-    double output(double vRef, double vCurrent)
+    int output(double vRef, double vCurrent)
     {
         double e = vRef - vCurrent;
         int t = time_us_64();
@@ -49,7 +54,7 @@ public:
         tPrev = t;
 
         ePrev = e;
-        return output;
+        return int(output);
     }
 };
 
@@ -74,7 +79,7 @@ public:
         tPrev = time_us_64();
     }
 
-    double output(double wRef, double wCurrent)
+    int output(double wRef, double wCurrent)
     {
         double e = wRef - wCurrent;
         int t = time_us_64();
@@ -82,9 +87,85 @@ public:
         eTot += e * dt;
         double output = Kp * e + Ki * eTot;
         ePrev = e;
-        return output;
+        return int(output);
     }
 };
+
+class SteeringController
+{
+    public:
+    double ePrev = 0;
+    double eTot = 0;
+    double tPrev;
+
+    double Kp;
+    double Ki;
+    double Kd;
+
+    SteeringController(double Kp, double Ki, double Kd) {
+        this->Kp = Kp;
+        this->Ki = Ki;
+        this->Kd = Kd;
+
+        tPrev = time_us_64();
+    }
+
+    int output(double diffTOF) {
+        int t = time_us_64();
+        double dt = (t - tPrev) / 1000000;
+
+        eTot += diffTOF*dt;
+
+        double output = Kp * diffTOF + Ki * eTot;
+        ePrev = diffTOF;
+
+        return int(output);
+    }
+
+};
+
+class StanleyController
+{
+    public:
+    StanleyController() {
+    }
+};
+
+
+using string = const char *;
+
+template<typename T, size_t N = 512>
+class Array {
+private:
+    T buffer[N];
+    size_t size_ = 0;
+public:
+    void push_back(const T& val) {
+        if (size_ < N) {
+            buffer[size_++] = val;
+        } else {
+            printf("Out of space");
+        }
+    }
+    T& operator[](size_t idx) { return buffer[idx]; }
+    size_t size() const { return size_; }
+};
+
+class Trajectory
+{
+    public:
+    Trajectory(Array<string> &commands) {
+        for (int i = 0; i < commands.size(); i++) {
+            string command = commands[i];
+
+        }
+    }
+
+    StatePrediction getPos() {
+
+    }
+};
+
 
 void motorTest(Motor &Motor)
 {
@@ -146,6 +227,7 @@ int main()
 
     VController VContr(KP_V, KI_V, KD_V);
     WController WContr(KP_W, KI_W, KD_W);
+    SteeringController SContr(KP_S, KI_S, KD_S);
 
     Motor MotorL(Motor_Choice::LEFT);
     Motor MotorR(Motor_Choice::RIGHT);
@@ -163,15 +245,19 @@ int main()
     {
         if (stdio_usb_connected())
         {
-            auto [pwmL, pwmR] = controlLoop(VContr, WContr, MotorL, MotorR, 2, 0);
-            MotorL.setPWM(pwmL);
-            MotorR.setPWM(pwmR);
-            printf("Duty Left: %d Duty Right: %d\n", pwmL, pwmR);
+            std::vector<Command> commands = stateMachineSimple("FFLRFF");
+
+
+            // auto [pwmL, pwmR] = controlLoop(VContr, WContr, MotorL, MotorR, 2, 0);
+            // MotorL.setPWM(pwmL);
+            // MotorR.setPWM(pwmR);
+            // printf("Duty Left: %d Duty Right: %d\n", pwmL, pwmR);
         }
         else
         {
-            MotorL.setPWM(0);
-            MotorR.setPWM(0);
+            // MotorL.setPWM(0);
+            // MotorR.setPWM(0);
+            ;
         }
     }
 }

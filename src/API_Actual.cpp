@@ -47,7 +47,7 @@ void c2_callback(uint gpio, uint32_t events)
 
 Motor::Motor(Motor_Choice choice)
 {
-    int pinForward = choice == Motor_Choice::LEFT ?  dirA1Pin : dirB1Pin;
+    int pinForward = choice == Motor_Choice::LEFT ? dirA1Pin : dirB1Pin;
     int pinBackward = choice == Motor_Choice::LEFT ? dirA2Pin : dirB2Pin;
     int pinPWM = choice == Motor_Choice::LEFT ? spdAPin : spdBPin;
     int pinENC = choice == Motor_Choice::LEFT ? mrencPin : mlencPin;
