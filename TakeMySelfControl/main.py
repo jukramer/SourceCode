@@ -4,14 +4,12 @@ import sys
 import json
 import os
 import importlib 
-import asyncio 
 import threading
 import queue
 import time
 import signal
 import subprocess
 import platform
-from qasync import QEventLoop
 
 import numpy as np
 
@@ -227,7 +225,7 @@ class TakeMySelfControl(QMainWindow):
             build_status.setText("Run complete.")
             build_status.setStyleSheet("color: black;")
 
-        async def run_async():
+        def run():
             if not self.mission:
                 return
             if not self.mission:
@@ -256,164 +254,168 @@ class TakeMySelfControl(QMainWindow):
             build_status.setStyleSheet("color: green;")
 
             self.should_stop = False
-            try:
-                if platform.system() == "Darwin":
-                    self.process = await asyncio.create_subprocess_exec(
-                        run_cmd,
-                        cwd=dir,
-                        stdin=asyncio.subprocess.PIPE,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.STDOUT,
-                        preexec_fn=os.setsid
-                    )
-                else:
-                    self.process = await asyncio.create_subprocess_exec(
-                        run_cmd,
-                        cwd=dir,
-                        stdin=asyncio.subprocess.PIPE,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.STDOUT,
-                        creationflags=asyncio.subprocess.CREATE_NEW_PROCESS_GROUP
-                    )
-                self.should_stop = False
 
-                print("Started process:", self.process)
+            def worker():
+                try:
+                    if platform.system() == "Darwin":
+                        self.process = subprocess.Popen(
+                            run_cmd,
+                            cwd=dir,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            preexec_fn=os.setsid,
+                            text=True
+                        )
+                    else:
+                        self.process = subprocess.Popen(
+                            run_cmd,
+                            cwd=dir,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+                            text=True
+                        )
+                    self.should_stop = False
 
-                async def write(text):
-                    if self.process:
-                        self.process.stdin.write(text.encode('utf-8'))
-                        await self.process.stdin.drain()
+                    print("Started process:", self.process)
 
-                async def read_stream():
-                    output_buffer = []
-                    # Adjust these values based on desired responsiveness vs. performance
-                    
-                    MAX_BUFFER_LINES = 1  # Max lines to buffer before an update
-                    MAX_BUFFER_TIME_S = 0.1 # Max time (e.g., 100ms) before forcing an update
-                    
-                    last_emit_time = time.monotonic()
+                    def write(text):
+                        if self.process:
+                            self.process.stdin.write(text)
+                            self.process.stdin.flush()
 
-                    while True:
-                        line = await self.process.stdout.readline()
-                        if not line:
-                            break
-                        if self.should_stop:
-                            break
+                    def read_stream():
+                        output_buffer = []
+                        # Adjust these values based on desired responsiveness vs. performance
+                        
+                        MAX_BUFFER_LINES = 1  # Max lines to buffer before an update
+                        MAX_BUFFER_TIME_S = 0.1 # Max time (e.g., 100ms) before forcing an update
+                        
+                        last_emit_time = time.monotonic()
 
-                        line = line.decode('utf-8')
-                        print(line, end="")
+                        while True:
+                            line = self.process.stdout.readline()
+                            if not line:
+                                break
+                            if self.should_stop:
+                                break
 
-                        # --- Special handling for ">>>" commands ---
-                        if line.startswith(">>>"):
-                            parts = line.split()
-                            if len(parts) < 2:
-                                output_buffer.append(f">>> Error parsing command: {line.strip()}\n") 
-                                continue
-                            command = parts[1]
-                            if command == "setPWM":
-                                if len(parts) < 4:
-                                    output_buffer.append(f">>> Error parsing setPWM command: {line.strip()}\n")
-                                    continue
-
-                                motor = parts[2].lower()
-                                if motor != "left" and motor != "right":
-                                    output_buffer.append(f">>> Unknown motor: {motor}\n")
-                                    continue
-
-                                pwm = parts[3]
-                                try:
-                                    pwm = float(pwm)
-                                    pwm = max(min(pwm, 100.0), -100.0)
-                                except ValueError:
-                                    output_buffer.append(f">>> Invalid PWM value: {pwm}\n")
-                                    continue
-
-                                if motor == "left":
-                                    self.pg_renderer.mouse.left_pwm = pwm
-                                else:
-                                    self.pg_renderer.mouse.right_pwm = pwm
-                                continue
-
-                            elif command == "readRPM":
-                                if len(parts) < 3:
-                                    output_buffer.append(f">>> Error parsing readRPM command: {line.strip()}\n")
-                                    continue
-                                
-                                motor = parts[2].lower()
-                                if motor != "left" and motor != "right":
-                                    output_buffer.append(f">>> Unknown motor: {motor}\n")
-                                    continue
-
-                                rpm_value = self.pg_renderer.mouse.left_rpm if motor == "left" else self.pg_renderer.mouse.right_rpm
-                                print(f"RPM value for {motor} motor: {rpm_value}")
-
-                                await write(f"{rpm_value}\n")
-                                continue
-                            elif command == "readPOS":
-                                if len(parts) < 3:
-                                    print(f">>> Error parsing readPOS command: {line.strip()}\n")
-                                    continue
-                                
-                                motor = parts[2].lower()
-                                if motor != "left" and motor != "right":
-                                    print(f">>> Unknown motor: {motor}\n")
-                                    continue
-
-                                pos_value = self.pg_renderer.mouse.left_pos if motor == "left" else self.pg_renderer.mouse.right_pos
-
-                                await write(f"{pos_value}\n")
-                                continue
-                            elif command == "readTOF":
-                                if len(parts) < 3:
-                                    output_buffer.append(f">>> Error parsing readTOF command: {line.strip()}\n")
-                                    continue
-                                
-                                try:
-                                    sensor = int(parts[2])
-                                    if sensor < 0 or sensor >= 5:
-                                        raise ValueError("Sensor index out of range")
-                                except ValueError:
-                                    output_buffer.append(f">>> Invalid sensor index: {parts[2]}\n")
-                                    continue
-
-                                tof_reading, tof_valid = self.pg_renderer.mouse.get_tof_reading(sensor)
-                                await write(f"{tof_reading} {'t' if tof_valid else 'f'}\n")
-                                continue
-                            else:
-                                output_buffer.append(f"Unknown command: {line.strip()}\n")
-                                continue 
-                        else:
-                            # --- Regular line: add to buffer ---
-                            output_buffer.append(line)
                             print(line, end="")
 
-                        current_time = time.monotonic()
-                        if (len(output_buffer) >= MAX_BUFFER_LINES or (current_time - last_emit_time) >= MAX_BUFFER_TIME_S):
-                            if output_buffer:
-                                self.text_emitter.append_text.emit("".join(output_buffer))
-                                output_buffer.clear()
-                                last_emit_time = current_time
+                            # --- Special handling for ">>>" commands ---
+                            if line.startswith(">>>"):
+                                parts = line.split()
+                                if len(parts) < 2:
+                                    output_buffer.append(f">>> Error parsing command: {line.strip()}\n") 
+                                    continue
+                                command = parts[1]
+                                if command == "setPWM":
+                                    if len(parts) < 4:
+                                        output_buffer.append(f">>> Error parsing setPWM command: {line.strip()}\n")
+                                        continue
 
-                    # --- Emit any remaining lines after the loop ---
-                    if output_buffer:
-                        self.text_emitter.append_text.emit("".join(output_buffer))
-                        output_buffer.clear()
+                                    motor = parts[2].lower()
+                                    if motor != "left" and motor != "right":
+                                        output_buffer.append(f">>> Unknown motor: {motor}\n")
+                                        continue
 
-                await read_stream()
-                await self.process.wait()
-                self.process = None
-            except Exception as e:
-                print(f"Exception in run(): {e}")
-                self.text_box.write(f"Exception in run(): {e}\n")
+                                    pwm = parts[3]
+                                    try:
+                                        pwm = float(pwm)
+                                        pwm = max(min(pwm, 100.0), -100.0)
+                                    except ValueError:
+                                        output_buffer.append(f">>> Invalid PWM value: {pwm}\n")
+                                        continue
+
+                                    if motor == "left":
+                                        self.pg_renderer.mouse.left_pwm = pwm
+                                    else:
+                                        self.pg_renderer.mouse.right_pwm = pwm
+                                    continue
+
+                                elif command == "readRPM":
+                                    if len(parts) < 3:
+                                        output_buffer.append(f">>> Error parsing readRPM command: {line.strip()}\n")
+                                        continue
+                                    
+                                    motor = parts[2].lower()
+                                    if motor != "left" and motor != "right":
+                                        output_buffer.append(f">>> Unknown motor: {motor}\n")
+                                        continue
+
+                                    rpm_value = self.pg_renderer.mouse.left_rpm if motor == "left" else self.pg_renderer.mouse.right_rpm
+                                    print(f"RPM value for {motor} motor: {rpm_value}")
+
+                                    write(f"{rpm_value}\n")
+                                    continue
+                                elif command == "readPOS":
+                                    if len(parts) < 3:
+                                        print(f">>> Error parsing readPOS command: {line.strip()}\n")
+                                        continue
+                                    
+                                    motor = parts[2].lower()
+                                    if motor != "left" and motor != "right":
+                                        print(f">>> Unknown motor: {motor}\n")
+                                        continue
+
+                                    pos_value = self.pg_renderer.mouse.left_pos if motor == "left" else self.pg_renderer.mouse.right_pos
+
+                                    write(f"{pos_value}\n")
+                                    continue
+                                elif command == "readTOF":
+                                    if len(parts) < 3:
+                                        output_buffer.append(f">>> Error parsing readTOF command: {line.strip()}\n")
+                                        continue
+                                    
+                                    try:
+                                        sensor = int(parts[2])
+                                        if sensor < 0 or sensor >= 5:
+                                            raise ValueError("Sensor index out of range")
+                                    except ValueError:
+                                        output_buffer.append(f">>> Invalid sensor index: {parts[2]}\n")
+                                        continue
+
+                                    tof_reading, tof_valid = self.pg_renderer.mouse.get_tof_reading(sensor)
+                                    write(f"{tof_reading} {'t' if tof_valid else 'f'}\n")
+                                    continue
+                                else:
+                                    output_buffer.append(f"Unknown command: {line.strip()}\n")
+                                    continue 
+                            else:
+                                # --- Regular line: add to buffer ---
+                                output_buffer.append(line)
+
+                            current_time = time.monotonic()
+                            if (len(output_buffer) >= MAX_BUFFER_LINES or (current_time - last_emit_time) >= MAX_BUFFER_TIME_S):
+                                if output_buffer:
+                                    self.text_emitter.append_text.emit("".join(output_buffer))
+                                    output_buffer.clear()
+                                    last_emit_time = current_time
+
+                        # --- Emit any remaining lines after the loop ---
+                        if output_buffer:
+                            self.text_emitter.append_text.emit("".join(output_buffer))
+                            output_buffer.clear()
+        
+                    read_thread = threading.Thread(target=read_stream)
+                    read_thread.start()
+                    
+                    self.process.wait()
+                    read_thread.join()
                 
-            on_run_complete()
-
-        def run():
-            asyncio.create_task(run_async())
+                    self.process = None
+                except Exception as e:
+                    print(f"Exception in run(): {e}")
+                    self.text_box.write(f"Exception in run(): {e}\n")
+                    
+                on_run_complete()
+            threading.Thread(target=worker, daemon=True).start()
 
         run_button.clicked.connect(run)
-
-        async def stop_async():
+        
+        def stop():
             if self.process:
                 try:
                     self.should_stop = True
@@ -421,13 +423,10 @@ class TakeMySelfControl(QMainWindow):
                         os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
                     else:
                         self.process.send_signal(signal.CTRL_BREAK_EVENT)
-                    await self.process.wait()
+                    self.process.wait()
                 except Exception as e:
                     self.text_box.write(f"Error stopping process: {e}\n")
                 on_run_complete()
-
-        def stop():
-            asyncio.create_task(stop_async())
 
         stop_button.clicked.connect(stop)
 
@@ -599,11 +598,11 @@ class TakeMySelfControl(QMainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    loop = QEventLoop(app)
-    asyncio.set_event_loop(loop)
+
 
     window = TakeMySelfControl()
     window.show()  # Don't forget this!
 
-    with loop:
-        loop.run_forever()
+    app.exec()
+    #with loop:
+    #    loop.run_forever()

@@ -3,6 +3,10 @@
 #include <math.h>
 #include <vector>
 
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
+
 // Controller Constants
 #define KP_V 200.0 // Velocity controller
 #define KI_V 40.0
@@ -13,6 +17,8 @@
 #define KP_S 1.0 // Steering controller
 #define KI_S 1.0
 #define KD_S 0.0
+#define K_CTSTAN 1.0 // Stanley controller
+#define K_SSTAN 0.05 
 
 #define CELL_WIDTH 0.18
 
@@ -151,13 +157,6 @@ public:
     }
 };
 
-VController VContr(KP_V, KI_V, KD_V);
-WController WContr(KP_W, KI_W, KD_W);
-SteeringController SContr(KP_S, KI_S, KD_S);
-
-Motor MotorL(Motor_Choice::LEFT);
-Motor MotorR(Motor_Choice::RIGHT);
-
 class StanleyController
 {
 public:
@@ -259,8 +258,8 @@ public:
             } else if (prevTargetPose.theta == 180) {
                 double xRoot = targetPose.x;
                 double yRoot = targetPose.y + TURN_RADIUS;
-                double phiCurrent = atan2(yRoot - POSE.y, xRoot - POSE.x)*180/M_PI;
-                double xDesired = xRoot - TURN_RADIUS*cos(phiCurrent*M_PI/180);
+                double phiCurrent = atan2(yRoot - POSE.y, POSE.x - xRoot)*180/M_PI;
+                double xDesired = xRoot + TURN_RADIUS*cos(phiCurrent*M_PI/180);
                 double yDesired = yRoot - TURN_RADIUS*sin(phiCurrent*M_PI/180);
                 
             } else if (prevTargetPose.theta == 270) {
@@ -268,7 +267,7 @@ public:
                 double yRoot = targetPose.y;
                 double phiCurrent = atan2(POSE.x - xRoot, POSE.y - yRoot)*180/M_PI;
                 double xDesired = xRoot + TURN_RADIUS*sin(phiCurrent*M_PI/180);
-                double yDesired = yRoot - TURN_RADIUS*cos(phiCurrent*M_PI/180);
+                double yDesired = yRoot + TURN_RADIUS*cos(phiCurrent*M_PI/180);
             }
 
             double e = sqrt(pow(xRoot - POSE.x, 2) + pow(yRoot - POSE.y, 2)) - TURN_RADIUS;
@@ -283,8 +282,17 @@ public:
 
             return W;
         }   
+        return 0;
     }   
 };
+
+VController VContr(KP_V, KI_V, KD_V);
+WController WContr(KP_W, KI_W, KD_W);
+SteeringController SContr(KP_S, KI_S, KD_S);
+StanleyController StanContr(K_CTSTAN, K_SSTAN, NULL);
+
+Motor MotorL(Motor_Choice::LEFT);
+Motor MotorR(Motor_Choice::RIGHT);
 
 using string = const char *;
 
@@ -304,7 +312,7 @@ public:
         }
         else
         {
-            printf("Out of space");
+            printf("Out of space\n");
         }
     }
     T &operator[](size_t idx) { return buffer[idx]; }
@@ -355,13 +363,12 @@ void motorTest(Motor &Motor)
         Motor.setPWM(0);
         sleep_ms(1000);
     }
-    else
-    {
+    else {
         Motor.setPWM(0);
     }
 }
 
-std::pair<int, int> controlLoop(float vTarget, float wTarget)
+std::pair<double, double> controlLoop(float vTarget, float wTarget)
 {
     float rpmCurrentL = MotorL.readRPM();
     float rpmCurrentR = MotorR.readRPM();
@@ -372,11 +379,13 @@ std::pair<int, int> controlLoop(float vTarget, float wTarget)
 
     double vOut = VContr.output(vTarget, vCurrentAVG);
     double wOut = WContr.output(wTarget, wCurrent);
+    double sOut = StanContr.output();
+    wOut += sOut;
 
     printf("VOut: %f WOut: %f rpmL: %f rpmR: %f vL: %f vR: %f W: %f\n", vOut, wOut, rpmCurrentL, rpmCurrentR, vCurrentL, vCurrentR, wCurrent);
 
-    int dutyL = int(std::max(std::min((vOut - wOut), 100.0), -100.0));
-    int dutyR = int(std::max(std::min((vOut + wOut), 100.0), -100.0));
+    double dutyL = std::max(std::min((vOut - wOut), 100.0), -100.0);
+    double dutyR = std::max(std::min((vOut + wOut), 100.0), -100.0);
 
     return {dutyL, dutyR};
 }
@@ -465,6 +474,7 @@ void setTarget(Command command) {
             targetPose.x += CELL_WIDTH/2.0;
             targetPose.y -= CELL_WIDTH/2.0;
         }
+
     } else if (command.action == "STOP") {
         currentMovement = STOP;
         targetPose.v = 0;
@@ -479,18 +489,6 @@ void setTarget(Command command) {
             targetPose.x += CELL_WIDTH;
         }
     }
-    // } else if (step == 'L') {
-    //     currentMovement = TURN_L;
-    //     if (POSE.theta <= 0.1) {
-    //         targetPose.y += CELL_WIDTH;
-    //     } else if (POSE.theta - 90 <= 0.1) {
-    //         targetPose.x -= CELL_WIDTH;
-    //     } else if (POSE.theta - 180 <= 0.1) {
-    //         targetPose.y -= CELL_WIDTH;
-    //     } else if (POSE.theta - 270 <= 0.1) {
-    //         targetPose.x += CELL_WIDTH;
-    //     }
-    // }
 }
 
 bool checkTargetReached() {
@@ -500,22 +498,38 @@ bool checkTargetReached() {
     return false;
 }
 
-
 int main()
 {
     global_init();
 
-    double vtarg = 5.0;
-    double wtarg = 0.0;
-    VContr.reset();
-    double vout1 = VContr.output(vtarg, 0.0);
-    double vout2 = VContr.output(vtarg, 2.0);
-    double vout3 = VContr.output(vtarg, 3.0);
+    setTarget(Command {"FWD", 3});
+    printf("Current Pose: %f %f %f %f %f\nTarget Pose: %f %f %f %f %f\nPrevious Target Pose: %f %f %f %f %f\n", POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w, targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w, prevTargetPose.x, prevTargetPose.y, prevTargetPose.theta, prevTargetPose.v, prevTargetPose.w);
 
-    double wout1 = WContr.output(wtarg, -1);
-    double wout2 = WContr.output(wtarg, -0.2);
-    double wout3 = WContr.output(wtarg, 0);
-    printf("%f %f %f %f %f %f\n", vout1, vout2, vout3, wout1, wout2, wout3);
+    // POSE = {-0.02, 0.02, 15, 0.95*V_MAX, W_MAX};
+    // double w = StanContr.output();
+
+    // printf("W: %f", w);
+
+    while (true) {
+        auto [dutyL, dutyR] = controlLoop(5, 0);
+
+        MotorL.setPWM((float) dutyL);
+        MotorR.setPWM((float) dutyR);
+
+        printf("%f %f\n", dutyL, dutyR);
+    }
+    
+    // double vtarg = 5.0;
+    // double wtarg = 0.0;
+    // VContr.reset();
+    // double vout1 = VContr.output(vtarg, 0.0);
+    // double vout2 = VContr.output(vtarg, 2.0);
+    // double vout3 = VContr.output(vtarg, 3.0);
+
+    // double wout1 = WContr.output(wtarg, -1);
+    // double wout2 = WContr.output(wtarg, -0.2);
+    // double wout3 = WContr.output(wtarg, 0);
+    // printf("%f %f %f %f %f %f\n", vout1, vout2, vout3, wout1, wout2, wout3);
     // std::vector<Command> commands = stateMachineSimple("FLFLS");
 
     // Queue<Command> commandQueue = {Command {"STOP", 0}, Command {"FWD", 3}};
