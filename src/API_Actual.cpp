@@ -12,7 +12,7 @@
 #include "pico/time.h"
 #include <math.h>
 
-#include "drivers/vl53l0x.h"
+#include "drivers/vl53l1x.h"
 #include "drivers/vl6180x.h"
 #include "drivers/driver_mpu6500_fifo.h"
 
@@ -177,7 +177,7 @@ Adafruit_VL6180X TOF_XS[4] = {
     Adafruit_VL6180X(),
     Adafruit_VL6180X()};
 
-VL53L0X TOF_XL;
+VL53L1X TOF_XL;
 
 void init_gpio(uint8_t gpio)
 {
@@ -268,7 +268,7 @@ void global_init()
     gpio_init(imusclPin);
 
     i2c_deinit(I2C_CHANNEL_IMU);
-    i2c_init(I2C_CHANNEL_IMU, 400 * 1000);
+    i2c_init(I2C_CHANNEL_IMU, 200 * 1000);
 
     gpio_set_function(imusdaPin, GPIO_FUNC_I2C);
     gpio_set_function(imusclPin, GPIO_FUNC_I2C);
@@ -328,18 +328,9 @@ void global_init()
     //
     xshut(tofXL1Pin, true);
 
-    sleep_ms(50);
-    for (uint8_t addr = 0x00; addr <= 0x77; ++addr)
-    {
-        // printf("  -> 0x%02X\n", addr);
-        if (scan_address(I2C_CHANNEL_TOF, addr))
-        {
-            printf("  -> Found device at 0x%02X\n", addr);
-        }
-    }
-
     int retryCount = 0;
-    while (!TOF_XL.init(false))
+
+    while (!TOF_XL.init(true))
     {
         sleep_ms(1);
 
@@ -349,7 +340,17 @@ void global_init()
             printf("Failed to initialize VL53L0X after 100 retries.\n");
             break;
         }
+
+        for (uint8_t addr = 0x00; addr <= 0x77; ++addr)
+        {
+            // printf("  -> 0x%02X\n", addr);
+            if (scan_address(I2C_CHANNEL_TOF, addr))
+            {
+                printf("  -> Found device at 0x%02X\n", addr);
+            }
+        }
     }
+    TOF_XL.setAddress(0x4A);
 
     gpio_init(dirA1Pin);
     gpio_set_dir(dirA1Pin, GPIO_OUT);
@@ -366,36 +367,66 @@ void global_init()
     //
     // Start TOF continuous ranging
     //
-    TOF_XL.startContinuous(50); // Start continuous ranging with 50ms period
+    TOF_XL.setDistanceMode(TOF_XL.Short);
+    TOF_XL.setMeasurementTimingBudget(20000);
+    TOF_XL.startContinuous(10); // Start back-to-back measurements
+    
     for (int i = 0; i < 4; i++)
     {
         TOF_XS[i].startRangeContinuous(50);
     }
 }
 
-uint8_t mm[4] = {};
-float mmXL = 0;
+volatile byte MM_XS[4] = {};
+volatile bool MM_VALID_XS[4] = {false, false, false, false};
+
+uint16_t MM_XL = 0;
+bool MM_VALID_XL = false;
+
+absolute_time_t last_read_time = get_absolute_time();
 
 void global_read_tofs()
 {
-    for (int i = 0; i < 0; i++)
+    auto frameBegin = time_us_64();
+
+    for (int i = 0; i < 4; i++)
     {
         if (TOF_XS[i].isRangeComplete())
         {
-            mm[i] = TOF_XS[i].readRangeResult();
+            byte mm = TOF_XS[i].readRangeResult();
+            byte status = TOF_XS[i].readRangeStatus();
+            
+            MM_XS[i] = mm;
+            MM_VALID_XS[i] = (status == VL6180X_ERROR_NONE);
         }
+        
         // float lux = TOF_XS[i].readLux(VL6180X_ALS_GAIN_5);
         // uint8_t range = TOF_XS[i].readRange();
-        // uint8_t status = TOF_XS[i].readRangeStatus();
         // printf("Sensor %d - Lux: %.2f, Range: %d mm, Status: %d, ", i, lux, range, status);
-
-        printf("%d: Range: %d mm | ", i, mm[i]);
+        printf("%d - Range: %d mm, Valid: %d | ", i, MM_XS[i], MM_VALID_XS[i]);
     }
 
-    if (TOF_XL.readRangeContinuousMillimeters())
-    {
-        mmXL = TOF_XL.readRangeContinuousMillimeters();
-        printf("XL Range: %d mm", (int)mmXL);
+    if (TOF_XL.dataReady()) {
+        absolute_time_t now = get_absolute_time();
+
+        uint16_t mm = TOF_XL.read(true); // non-blocking read
+        MM_XL = mm;
+        MM_VALID_XL = (TOF_XL.ranging_data.range_status == VL53L1X::RangeValid);
+        
+        int64_t time_diff_us = absolute_time_diff_us(last_read_time, now);
+        last_read_time = now;
     }
-    printf("\n");
+    printf("XL Distance: %u mm, Valid: %d | ", MM_XL, MM_VALID_XL);
+
+    auto frameEnd = time_us_64();
+    int64_t frameDuration = frameEnd - frameBegin;
+    printf(" Frame Duration: %lld us\n", frameDuration);
+
+    //uint64_t last_read_time = time_us_64();
+    //mmXL = TOF_XL.readRangeContinuousMillimeters(); // Trigger a single measurement
+    //uint64_t now = time_us_64();
+
+    //int64_t time_diff_us = now - last_read_time;
+
+    //printf("XL Distance: %d mm | Time: %lld us\n", mmXL, time_diff_us);
 }

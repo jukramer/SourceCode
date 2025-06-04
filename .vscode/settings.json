@@ -120,6 +120,8 @@
         "execution": "cpp",
         "forward_list": "cpp",
         "queue": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "__config": "cpp",
+        "__tree": "cpp"
     }
 }

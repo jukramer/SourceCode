@@ -302,7 +302,88 @@ class TakeMySelfControl(QMainWindow):
                             if self.should_stop:
                                 break
 
-                            print(line, end="")
+                            # --- Special handling for ">>>" commands ---
+                            if line.startswith(">>>"):
+                                parts = line.split()
+                                if len(parts) < 2:
+                                    output_buffer.append(f">>> Error parsing command: {line.strip()}\n") 
+                                    continue
+                                command = parts[1]
+                                if command == "setPWM":
+                                    if len(parts) < 4:
+                                        output_buffer.append(f">>> Error parsing setPWM command: {line.strip()}\n")
+                                        continue
+
+                                    motor = parts[2].lower()
+                                    if motor != "left" and motor != "right":
+                                        output_buffer.append(f">>> Unknown motor: {motor}\n")
+                                        continue
+
+                                    pwm = parts[3]
+                                    try:
+                                        pwm = float(pwm)
+                                        pwm = max(min(pwm, 100.0), -100.0)
+                                    except ValueError:
+                                        output_buffer.append(f">>> Invalid PWM value: {pwm}\n")
+                                        continue
+
+                                    if motor == "left":
+                                        self.pg_renderer.mouse.left_pwm = pwm
+                                    else:
+                                        self.pg_renderer.mouse.right_pwm = pwm
+                                    continue
+
+                                elif command == "readRPM":
+                                    if len(parts) < 3:
+                                        output_buffer.append(f">>> Error parsing readRPM command: {line.strip()}\n")
+                                        continue
+                                    
+                                    motor = parts[2].lower()
+                                    if motor != "left" and motor != "right":
+                                        output_buffer.append(f">>> Unknown motor: {motor}\n")
+                                        continue
+
+                                    rpm_value = self.pg_renderer.mouse.left_rpm if motor == "left" else self.pg_renderer.mouse.right_rpm
+
+                                    await write(f"{rpm_value}\n")
+                                    continue
+                                elif command == "readPOS":
+                                    if len(parts) < 3:
+                                        print(f">>> Error parsing readPOS command: {line.strip()}\n")
+                                        continue
+                                    
+                                    motor = parts[2].lower()
+                                    if motor != "left" and motor != "right":
+                                        print(f">>> Unknown motor: {motor}\n")
+                                        continue
+
+                                    pos_value = self.pg_renderer.mouse.left_pos if motor == "left" else self.pg_renderer.mouse.right_pos
+
+                                    await write(f"{pos_value}\n")
+                                    continue
+                                elif command == "readTOF":
+                                    if len(parts) < 3:
+                                        output_buffer.append(f">>> Error parsing readTOF command: {line.strip()}\n")
+                                        continue
+                                    
+                                    try:
+                                        sensor = int(parts[2])
+                                        if sensor < 0 or sensor >= 5:
+                                            raise ValueError("Sensor index out of range")
+                                    except ValueError:
+                                        output_buffer.append(f">>> Invalid sensor index: {parts[2]}\n")
+                                        continue
+
+                                    tof_reading, tof_valid = self.pg_renderer.mouse.get_tof_reading(sensor)
+                                    await write(f"{tof_reading} {'t' if tof_valid else 'f'}\n")
+                                    continue
+                                else:
+                                    output_buffer.append(f"Unknown command: {line.strip()}\n")
+                                    continue 
+                            else:
+                                # --- Regular line: add to buffer ---
+                                output_buffer.append(line)
+                                print(line, end="")
 
                             # --- Special handling for ">>>" commands ---
                             if line.startswith(">>>"):
@@ -404,7 +485,6 @@ class TakeMySelfControl(QMainWindow):
                     
                     self.process.wait()
                     read_thread.join()
-                
                     self.process = None
                 except Exception as e:
                     print(f"Exception in run(): {e}")
