@@ -121,6 +121,7 @@ struct Command {
 inline int currentMovement = IDLE;
 inline bool targetReached = false;
 inline Pose targetPose = {0, 0, 0, 0, 0};
+inline Pose prevTargetPose = {0, 0, 0, 0, 0};
 
 std::vector<Command> stateMachineSimple(const std::string &path);
 

@@ -14,10 +14,12 @@
 #define KI_S 1.0
 #define KD_S 0.0
 
-#define V_MAX 2.0
-#define W_MAX 3.0
-
 #define CELL_WIDTH 0.18
+
+#define V_MAX 2.0
+#define TURN_RADIUS (CELL_WIDTH/2.0)
+#define W_MAX (V_MAX/TURN_RADIUS)
+
 
 class VController
 {
@@ -30,7 +32,7 @@ public:
     double Kd;
 
     // int tPrev;
-    int64_t tPrev;
+    uint64_t tPrev;
     // int64_t tPrev;
 
     VController(double Kp, double Ki, double Kd)
@@ -42,22 +44,31 @@ public:
         tPrev = time_us_64();
     }
 
-    int output(double vRef, double vCurrent)
+    double output(double vRef, double vCurrent)
     {
         double e = vRef - vCurrent;
-        int t = time_us_64();
 
-        double dt = (t - tPrev) / 1000000.0;
+        uint64_t t = time_us_64(); //[us]
+
+        double dt = double(t - tPrev) / 1000000.0; // [s]
+
+        printf("dt: %f Current time: %lld Previous time: %lld e: %f eTot: %f\n", dt, t, tPrev, e, eTot);
 
         // std::cout<<"dt: "<<dt<<"Current time: "<<t<<" Previous time: "<<tPrev<<std::endl;
         // std::cout<<"eTot: "<<eTot<<std::endl;
         eTot += e * dt;
 
-        double output = Kp * e + Ki * eTot + Kd * (e - ePrev) / dt;
-        tPrev = t;
+        double output = Kp * e + Ki * eTot;
 
+        this->tPrev = t;
         ePrev = e;
-        return int(output);
+
+        return output;
+    }
+
+    void reset() {
+        eTot = 0;
+        tPrev = time_us_64();
     }
 };
 
@@ -71,7 +82,7 @@ public:
     double Ki;
     double Kd;
 
-    int64_t tPrev;
+    uint64_t tPrev;
 
     WController(double Kp, double Ki, double Kd)
     {
@@ -82,15 +93,27 @@ public:
         tPrev = time_us_64();
     }
 
-    int output(double wRef, double wCurrent)
+    double output(double wRef, double wCurrent)
     {
         double e = wRef - wCurrent;
-        int t = time_us_64();
-        double dt = (t - tPrev) / 1000000;
+
+        uint64_t t = time_us_64();
+
+        double dt = double(t - tPrev) / 1000000;
+
         eTot += e * dt;
+
         double output = Kp * e + Ki * eTot;
+        
         ePrev = e;
+        tPrev = t;
+
         return int(output);
+    }
+
+    void reset() {
+        eTot = 0;
+        tPrev = time_us_64();
     }
 };
 
@@ -124,7 +147,7 @@ public:
         double output = Kp * diffTOF + Ki * eTot;
         ePrev = diffTOF;
 
-        return int(output);
+        return output;
     }
 };
 
@@ -138,9 +161,129 @@ Motor MotorR(Motor_Choice::RIGHT);
 class StanleyController
 {
 public:
-    StanleyController()
+    double K_CT; // Cross-track gain
+    double K_S; // Smoothing gain
+    double maxDelta;
+    
+    StanleyController(double K_CT, double K_S, double maxDelta)
     {
+        this->K_CT = K_CT;
+        this->K_S = K_S;
+        this->maxDelta = maxDelta;
     }
+
+    double output() {
+        if (currentMovement == FWD) {
+            double e = 0;
+
+            if (targetPose.theta == 0) {
+                e = POSE.x - targetPose.x; // cross-track error
+            } else if (targetPose.theta == 90) {
+                e = POSE.y - targetPose.y; // cross-track error
+            } else if (targetPose.theta == 180) {
+                e = targetPose.x - POSE.x; // cross-track error 
+            } else if (targetPose.theta == 270) {
+                e = targetPose.y - POSE.y; // cross-track error
+            }
+
+            double psi = POSE.theta - targetPose.theta; // heading error
+
+            double delta = psi + atan2(K_CT*e, POSE.v + K_S)*180/M_PI;
+
+            double vL = targetPose.v*(1-tan(delta*M_PI/180)/2);
+            double vR = targetPose.v*(1+tan(delta*M_PI/180)/2);
+            double W = (vR - vL)/WHEEL_BASE;
+
+            return W;
+
+        } else if (currentMovement == TURN_L) {
+            double xRoot, yRoot, xDesired, yDesired, phiCurrent;
+
+            if (prevTargetPose.theta == 0) {
+                double xRoot = targetPose.x; // center of rotation
+                double yRoot = targetPose.y - TURN_RADIUS;
+                double phiCurrent = atan2(POSE.y - yRoot, POSE.x - xRoot)*180/M_PI;
+                double xDesired = xRoot + TURN_RADIUS*cos(phiCurrent*M_PI/180);
+                double yDesired = yRoot + TURN_RADIUS*sin(phiCurrent*M_PI/180);
+
+            } else if (prevTargetPose.theta == 90) {
+                double xRoot = targetPose.x + TURN_RADIUS; // center of rotation
+                double yRoot = targetPose.y;
+                double phiCurrent = atan2(xRoot - POSE.x, POSE.y - yRoot)*180/M_PI;
+                double xDesired = xRoot - TURN_RADIUS*sin(phiCurrent*M_PI/180);
+                double yDesired = yRoot + TURN_RADIUS*cos(phiCurrent*M_PI/180);
+
+            } else if (prevTargetPose.theta == 180) {
+                double xRoot = targetPose.x;
+                double yRoot = targetPose.y + TURN_RADIUS;
+                double phiCurrent = atan2(yRoot - POSE.y, xRoot - POSE.x)*180/M_PI;
+                double xDesired = xRoot - TURN_RADIUS*cos(phiCurrent*M_PI/180);
+                double yDesired = yRoot - TURN_RADIUS*sin(phiCurrent*M_PI/180);
+                
+            } else if (prevTargetPose.theta == 270) {
+                double xRoot = targetPose.x - TURN_RADIUS;
+                double yRoot = targetPose.y;
+                double phiCurrent = atan2(POSE.x - xRoot, yRoot - POSE.y)*180/M_PI;
+                double xDesired = xRoot + TURN_RADIUS*sin(phiCurrent*M_PI/180);
+                double yDesired = yRoot - TURN_RADIUS*cos(phiCurrent*M_PI/180);
+            }
+
+            double e = sqrt(pow(xRoot - POSE.x, 2) + pow(yRoot - POSE.y, 2)) - TURN_RADIUS;
+            double thetaDesired = 90 - phiCurrent;
+            double psi = POSE.theta - thetaDesired;
+
+            double delta = psi + atan2(K_CT*e, POSE.v + K_S);
+
+            double vL = targetPose.v*(1-tan(delta*M_PI/180)/2);
+            double vR = targetPose.v*(1+tan(delta*M_PI/180)/2);
+            double W = (vR - vL)/WHEEL_BASE;
+
+            return W;
+        } else if (currentMovement == TURN_R) {
+            double xRoot, yRoot, xDesired, yDesired, phiCurrent;
+
+            if (prevTargetPose.theta == 0) {
+                double xRoot = targetPose.x; // center of rotation
+                double yRoot = targetPose.y - TURN_RADIUS;
+                double phiCurrent = atan2(POSE.y - yRoot, -POSE.x + xRoot)*180/M_PI;
+                double xDesired = xRoot - TURN_RADIUS*cos(phiCurrent*M_PI/180);
+                double yDesired = yRoot + TURN_RADIUS*sin(phiCurrent*M_PI/180);
+
+            } else if (prevTargetPose.theta == 90) {
+                double xRoot = targetPose.x + TURN_RADIUS; // center of rotation
+                double yRoot = targetPose.y;
+                double phiCurrent = atan2(xRoot - POSE.x, yRoot - POSE.y)*180/M_PI;
+                double xDesired = xRoot - TURN_RADIUS*sin(phiCurrent*M_PI/180);
+                double yDesired = yRoot - TURN_RADIUS*cos(phiCurrent*M_PI/180);
+
+            } else if (prevTargetPose.theta == 180) {
+                double xRoot = targetPose.x;
+                double yRoot = targetPose.y + TURN_RADIUS;
+                double phiCurrent = atan2(yRoot - POSE.y, xRoot - POSE.x)*180/M_PI;
+                double xDesired = xRoot - TURN_RADIUS*cos(phiCurrent*M_PI/180);
+                double yDesired = yRoot - TURN_RADIUS*sin(phiCurrent*M_PI/180);
+                
+            } else if (prevTargetPose.theta == 270) {
+                double xRoot = targetPose.x - TURN_RADIUS;
+                double yRoot = targetPose.y;
+                double phiCurrent = atan2(POSE.x - xRoot, POSE.y - yRoot)*180/M_PI;
+                double xDesired = xRoot + TURN_RADIUS*sin(phiCurrent*M_PI/180);
+                double yDesired = yRoot - TURN_RADIUS*cos(phiCurrent*M_PI/180);
+            }
+
+            double e = sqrt(pow(xRoot - POSE.x, 2) + pow(yRoot - POSE.y, 2)) - TURN_RADIUS;
+            double thetaDesired = 90 - phiCurrent;
+            double psi = POSE.theta - thetaDesired;
+
+            double delta = psi + atan2(K_CT*e, POSE.v + K_S);
+
+            double vL = targetPose.v*(1-tan(delta*M_PI/180)/2);
+            double vR = targetPose.v*(1+tan(delta*M_PI/180)/2);
+            double W = (vR - vL)/WHEEL_BASE;
+
+            return W;
+        }   
+    }   
 };
 
 using string = const char *;
@@ -265,8 +408,10 @@ inline Pose getCurrentPose() {
 }
 
 void setTarget(Command command) {
+    prevTargetPose = targetPose;
     targetReached = false;
     if (command.action == "FWD") {
+        // Forward for command.value cells
         currentMovement = FWD;
         targetPose.v = V_MAX;
         targetPose.w = 0;
@@ -279,9 +424,48 @@ void setTarget(Command command) {
         } else if (POSE.theta - 270 <= 0.1) {
             targetPose.x += CELL_WIDTH*command.value;
         }
-    }
-
-    if (command.action == "STOP") {
+    } else if (command.action == "TRN" && command.value==90) {
+        currentMovement = TURN_L;
+        targetPose.theta += 90;
+        int theta = targetPose.theta;
+        targetPose.theta = theta % 360;
+        targetPose.v = V_MAX;
+        targetPose.w = W_MAX;
+        if (POSE.theta <= 0.1) {
+            targetPose.x -= CELL_WIDTH/2.0;
+            targetPose.y += CELL_WIDTH/2.0;
+        } else if (POSE.theta - 90 <= 0.1) {
+            targetPose.x -= CELL_WIDTH/2.0;
+            targetPose.y -= CELL_WIDTH/2.0;
+        } else if (POSE.theta - 180 <= 0.1) {
+            targetPose.x += CELL_WIDTH/2.0;
+            targetPose.y -= CELL_WIDTH/2.0;
+        } else if (POSE.theta - 270 <= 0.1) {
+            targetPose.x += CELL_WIDTH/2.0;
+            targetPose.y += CELL_WIDTH/2.0;
+        }
+    } else if (command.action == "TRN" && command.value==-90) {
+        currentMovement = TURN_R;
+        targetPose.theta -= 90;
+        int theta = targetPose.theta;
+        targetPose.theta = theta % 360;
+        targetPose.v = V_MAX;
+        targetPose.w = -W_MAX;
+        
+        if (POSE.theta <= 0.1) {
+            targetPose.x += CELL_WIDTH/2.0;
+            targetPose.y += CELL_WIDTH/2.0;
+        } else if (POSE.theta - 90 <= 0.1) {
+            targetPose.x -= CELL_WIDTH/2.0;
+            targetPose.y += CELL_WIDTH/2.0;
+        } else if (POSE.theta - 180 <= 0.1) {
+            targetPose.x -= CELL_WIDTH/2.0;
+            targetPose.y -= CELL_WIDTH/2.0;
+        } else if (POSE.theta - 270 <= 0.1) {
+            targetPose.x += CELL_WIDTH/2.0;
+            targetPose.y -= CELL_WIDTH/2.0;
+        }
+    } else if (command.action == "STOP") {
         currentMovement = STOP;
         targetPose.v = 0;
         targetPose.w = 0;
@@ -321,19 +505,22 @@ int main()
 {
     global_init();
 
-    double vtarg = 5;
-    double vout1 = VContr.output(vtarg, 0);
-    double vout2 = VContr.output(vtarg, 2);
-    double vout3 = VContr.output(vtarg, 3);
+    double vtarg = 5.0;
+    double wtarg = 0.0;
+    VContr.reset();
+    double vout1 = VContr.output(vtarg, 0.0);
+    double vout2 = VContr.output(vtarg, 2.0);
+    double vout3 = VContr.output(vtarg, 3.0);
 
-    double wout1 = WContr.output(vtarg, 0);
-    double wout2 = WContr.output(vtarg, 2);
-    double wout3 = WContr.output(vtarg, 3);
+    double wout1 = WContr.output(wtarg, -1);
+    double wout2 = WContr.output(wtarg, -0.2);
+    double wout3 = WContr.output(wtarg, 0);
+    printf("%f %f %f %f %f %f\n", vout1, vout2, vout3, wout1, wout2, wout3);
     // std::vector<Command> commands = stateMachineSimple("FLFLS");
 
-    Queue<Command> commandQueue = {Command {"STOP", 0}, Command {"FWD", 3}};
-    setTarget(commandQueue.pop());
-    // commandQueue.push(Command {"FWD", 0})
+    // Queue<Command> commandQueue = {Command {"STOP", 0}, Command {"FWD", 3}};
+    // setTarget(commandQueue.pop());
+    // // commandQueue.push(Command {"FWD", 0})
 
     while (true)
     {
@@ -360,12 +547,16 @@ int main()
             sleep_ms(100);
         }
 
-        POSE = getCurrentPose();
-        auto [dutyL, dutyR] = controlLoop(targetPose.v, targetPose.w);  
-        MotorL.setPWM(dutyL);
-        MotorR.setPWM(dutyR);
+        // POSE = getCurrentPose();
+        // auto [dutyL, dutyR] = controlLoop(targetPose.v, targetPose.w);  
+        // MotorL.setPWM(dutyL);
+        // MotorR.setPWM(dutyR);
 
-        targetReached = checkTargetReached();
+        // // Set new target if old one reached
+        // targetReached = checkTargetReached();
+        // if (targetReached) {
+        //     setTarget(commandQueue.pop());
+        // }
 
         // if (stdio_usb_connected())
         // {
