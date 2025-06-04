@@ -311,7 +311,7 @@ void global_init()
             sleep_ms(100);
 
             retryCount++;
-            if (retryCount > 100)
+            if (retryCount > 3)
             {
                 printf("Failed to initialize VL6180X on GPIO %d after 100 retries.\n", gpio);
                 xshut(gpio, false); // Turn off the sensor
