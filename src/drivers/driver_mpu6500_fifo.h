@@ -60,12 +60,12 @@ extern "C"{
 #define MPU6500_FIFO_DEFAULT_INTERRUPT_PIN_LEVEL            MPU6500_PIN_LEVEL_LOW                     /**< low level */
 #define MPU6500_FIFO_DEFAULT_INTERRUPT_PIN_TYPE             MPU6500_PIN_TYPE_PUSH_PULL                /**< push pull */
 #define MPU6500_FIFO_DEFAULT_INTERRUPT_MOTION               MPU6500_BOOL_FALSE                        /**< disable motion */
-#define MPU6500_FIFO_DEFAULT_INTERRUPT_FIFO_OVERFLOW        MPU6500_BOOL_TRUE                         /**< enable fifo overflow */
+#define MPU6500_FIFO_DEFAULT_INTERRUPT_FIFO_OVERFLOW        MPU6500_BOOL_FALSE                         /**< enable fifo overflow */
 #define MPU6500_FIFO_DEFAULT_INTERRUPT_DMP                  MPU6500_BOOL_FALSE                        /**< disable dmp */
 #define MPU6500_FIFO_DEFAULT_INTERRUPT_FSYNC_INT            MPU6500_BOOL_FALSE                        /**< disable fsync int */
 #define MPU6500_FIFO_DEFAULT_INTERRUPT_DATA_READY           MPU6500_BOOL_FALSE                        /**< disable data ready */
-#define MPU6500_FIFO_DEFAULT_INTERRUPT_LATCH                MPU6500_BOOL_TRUE                         /**< enable latch */
-#define MPU6500_FIFO_DEFAULT_INTERRUPT_READ_CLEAR           MPU6500_BOOL_TRUE                         /**< enable interrupt read clear */
+#define MPU6500_FIFO_DEFAULT_INTERRUPT_LATCH                MPU6500_BOOL_FALSE                         /**< enable latch */
+#define MPU6500_FIFO_DEFAULT_INTERRUPT_READ_CLEAR           MPU6500_BOOL_FALSE                         /**< enable interrupt read clear */
 #define MPU6500_FIFO_DEFAULT_EXTERN_SYNC                    MPU6500_EXTERN_SYNC_INPUT_DISABLED        /**< extern sync input disable */
 #define MPU6500_FIFO_DEFAULT_FSYNC_INTERRUPT                MPU6500_BOOL_FALSE                        /**< disable fsync interrupt */
 #define MPU6500_FIFO_DEFAULT_FSYNC_INTERRUPT_LEVEL          MPU6500_PIN_LEVEL_LOW                     /**< low level */

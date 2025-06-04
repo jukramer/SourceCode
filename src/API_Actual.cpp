@@ -142,11 +142,12 @@ float Motor::readRPM()
     return 0.0;
 }
 
-float Motor::readPOS() {
+float Motor::readPOS()
+{
     double pulses = double(*totalTicks - prevTicksPOS);
     prevTicksPOS = *totalTicks;
 
-    double deltaPos = pulses/TICKS_PER_REV*2*M_PI*WHEEL_RADIUS;
+    double deltaPos = pulses / TICKS_PER_REV * 2 * M_PI * WHEEL_RADIUS;
 
     return deltaPos;
 }
@@ -202,11 +203,6 @@ void imu_int(uint gpio, uint32_t events)
         mpu6500_fifo_irq_handler();
     }
 }
-
-static int16_t gs_accel_raw[128][3];
-static float gs_accel_g[128][3];
-static int16_t gs_gyro_raw[128][3];
-static float gs_gyro_dps[128][3];
 
 #define MPU_FILTER_DELAY_MS 11.8f
 #define MPU_FILTER_DELAY_S (MPU_FILTER_DELAY_MS / 1000.0f)
@@ -268,7 +264,7 @@ void global_init()
     gpio_init(imusclPin);
 
     i2c_deinit(I2C_CHANNEL_IMU);
-    i2c_init(I2C_CHANNEL_IMU, 200 * 1000);
+    i2c_init(I2C_CHANNEL_IMU, 400 * 1000);
 
     gpio_set_function(imusdaPin, GPIO_FUNC_I2C);
     gpio_set_function(imusclPin, GPIO_FUNC_I2C);
@@ -315,7 +311,7 @@ void global_init()
             {
                 printf("Failed to initialize VL6180X on GPIO %d after 100 retries.\n", gpio);
                 xshut(gpio, false); // Turn off the sensor
-    
+
                 break;
             }
         }
@@ -368,65 +364,158 @@ void global_init()
     // Start TOF continuous ranging
     //
     TOF_XL.setDistanceMode(TOF_XL.Short);
-    TOF_XL.setMeasurementTimingBudget(20000);
-    TOF_XL.startContinuous(10); // Start back-to-back measurements
-    
+    TOF_XL.setMeasurementTimingBudget(30000);
+    TOF_XL.startContinuous(1); // Start back-to-back measurements
+
     for (int i = 0; i < 4; i++)
     {
         TOF_XS[i].startRangeContinuous(50);
     }
 }
 
-volatile byte MM_XS[4] = {};
-volatile bool MM_VALID_XS[4] = {false, false, false, false};
+#define LOG 1
 
-uint16_t MM_XL = 0;
-bool MM_VALID_XL = false;
-
-absolute_time_t last_read_time = get_absolute_time();
+constexpr TOF_Direction INDEX_TO_TOF_DIRECTION[4] = {
+    TOF_Direction::RIGHT,
+    TOF_Direction::FRONT_RIGHT_45,
+    TOF_Direction::FRONT_LEFT_45,
+    TOF_Direction::LEFT,
+};
 
 void global_read_tofs()
 {
+    static uint64_t start_time = time_us_64();
+    static int counts_XS[4] = {0};
+    static int count_XL = 0;
+
     auto frameBegin = time_us_64();
 
     for (int i = 0; i < 4; i++)
     {
+        int index = (int) INDEX_TO_TOF_DIRECTION[i];
         if (TOF_XS[i].isRangeComplete())
         {
             byte mm = TOF_XS[i].readRangeResult();
             byte status = TOF_XS[i].readRangeStatus();
-            
-            MM_XS[i] = mm;
-            MM_VALID_XS[i] = (status == VL6180X_ERROR_NONE);
+
+            MM[index] = mm;
+            MM_VALID[index] = (status == VL6180X_ERROR_NONE);
+
+            // Count only if reading is valid
+            if (MM_VALID[index])
+                counts_XS[i]++;
         }
-        
-        // float lux = TOF_XS[i].readLux(VL6180X_ALS_GAIN_5);
-        // uint8_t range = TOF_XS[i].readRange();
-        // printf("Sensor %d - Lux: %.2f, Range: %d mm, Status: %d, ", i, lux, range, status);
-        printf("%d - Range: %d mm, Valid: %d | ", i, MM_XS[i], MM_VALID_XS[i]);
+#if LOG
+        printf("%d - Range: %d mm, Valid: %d | ", i, MM[index], MM_VALID[index]);
+#endif
     }
 
-    if (TOF_XL.dataReady()) {
-        absolute_time_t now = get_absolute_time();
-
+    int index = (int) TOF_Direction::FRONT;
+    if (TOF_XL.dataReady())
+    {
         uint16_t mm = TOF_XL.read(true); // non-blocking read
-        MM_XL = mm;
-        MM_VALID_XL = (TOF_XL.ranging_data.range_status == VL53L1X::RangeValid);
-        
-        int64_t time_diff_us = absolute_time_diff_us(last_read_time, now);
-        last_read_time = now;
-    }
-    printf("XL Distance: %u mm, Valid: %d | ", MM_XL, MM_VALID_XL);
 
+        MM[index] = mm;
+        MM_VALID[index] = (TOF_XL.ranging_data.range_status == VL53L1X::RangeValid);
+
+        if (MM_VALID[index])
+            count_XL++;
+    }
+
+#if LOG
+    printf("XL Distance: %u mm, Valid: %d | ", MM[index], MM_VALID[index]);
     auto frameEnd = time_us_64();
     int64_t frameDuration = frameEnd - frameBegin;
     printf(" Frame Duration: %lld us\n", frameDuration);
+#endif
 
-    //uint64_t last_read_time = time_us_64();
-    //mmXL = TOF_XL.readRangeContinuousMillimeters(); // Trigger a single measurement
-    //uint64_t now = time_us_64();
+    uint64_t now = time_us_64();
+    if (now - start_time >= 2 * 1000 * 1000)
+    {
+        printf("=== Sensor Frequencies (Hz) over 2 sec ===\n");
+        for (int i = 0; i < 4; i++)
+            printf("XS[%d]: %.2f Hz | ", i, counts_XS[i] / 2.0);
+        printf("XL: %.2f Hz\n", count_XL / 2.0);
 
-    //int64_t time_diff_us = now - last_read_time;
+        for (int i = 0; i < 4; i++)
+            counts_XS[i] = 0;
+        count_XL = 0;
+        start_time = now;
+    }
+}
 
-    //printf("XL Distance: %d mm | Time: %lld us\n", mmXL, time_diff_us);
+static int16_t gs_accel_raw[128][3];
+static float gs_accel_g[128][3];
+static int16_t gs_gyro_raw[128][3];
+static float gs_gyro_dps[128][3];
+
+void global_read_imu()
+{
+    static uint64_t t_start = time_us_64();
+    static uint64_t t_prev = time_us_64();
+    static uint64_t t_end_calib = t_prev + 3000000; // 3s calibration
+
+    static int calib_samples = 0;
+    static bool calibrated = false;
+
+    static int imu_sample_count = 0;
+
+    float ax_bias = 0.0f, ay_bias = 0.0f, gyro_z_bias = 0.0f;
+
+    auto t1 = time_us_64();
+
+    uint16_t len = 128;
+    mpu6500_fifo_read(gs_accel_raw, gs_accel_g, gs_gyro_raw, gs_gyro_dps, &len);
+    if (len == 0)
+        return;
+
+    if (len != 1) {
+        printf("Warning: IMU usually returns 1 sample, got %d samples.\n", len);
+    }
+
+    auto t2 = time_us_64();
+
+    float dt = (t2 - t_prev) / 1e6f;
+    t_prev = t2;
+
+    AX = gs_accel_g[0][0];
+    AY = gs_accel_g[0][1];
+    GYRO_Z = gs_gyro_dps[0][2];
+
+    if (!calibrated)
+    {
+        ax_bias += AX;
+        ay_bias += AY;
+        gyro_z_bias += GYRO_Z;
+
+        calib_samples++;
+
+        if (t2 > t_end_calib)
+        {
+            ax_bias /= calib_samples;
+            ay_bias /= calib_samples;
+            gyro_z_bias /= calib_samples;
+            calibrated = true;
+        }
+        return;
+    }
+
+    AX -= ax_bias;
+    AY -= ay_bias;
+    GYRO_Z -= gyro_z_bias;
+
+    imu_sample_count++;
+
+#if LOG
+    printf("IMU ax: %.2f, ay: %.2f, gyro_z: %.2f, dt: %.4f s, fifo len: %d\n", AX, AY, GYRO_Z, dt, len);
+#endif
+
+    if (t2 - t_start >= 2 * 1000 * 1000)
+    {
+        float hz = imu_sample_count / 2.0f;
+        printf("=== IMU Frequency: %.2f Hz ===\n", hz);
+
+        imu_sample_count = 0;
+        t_start = t2;
+    }
 }

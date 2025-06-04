@@ -73,6 +73,43 @@ o   o   o   o---o---o---o---o   o   o---o---o---o---o   o---o   o
 o---o---o---o---o---o---o---o---o---o---o---o---o---o---o---o---o
 """
 
+maze = """
+o---o---o---o---o---o---o---o---o---o---o---o---o---o---o---o---o
+|                               |                               |
+o   o---o---o---o---o---o---o   o   o---o---o---o   o   o---o   o
+|   |                                               |       |   |
+o   o   o   o---o---o---o---o---o---o---o---o---o   o---o   o---o
+|   |   |                                       |       |       |
+o   o   o   o---o---o---o---o---o---o---o---o   o---o   o---o   o
+|   |   |   |                               |       |       |   |
+o   o   o   o   o---o---o---o---o---o---o   o---o   o---o   o   o
+|   |   |   |   |                                               |
+o   o   o   o   o   o---o---o---o---o   o---o   o---o---o---o   o
+|   |   |   |       |               |       |       |           |
+o   o   o   o   o   o   o---o---o   o   o   o---o   o   o   o   o
+|   |   |   |   |       |       |       |       |       |   |   |
+o   o   o   o   o   o   o   o   o---o   o---o   o   o   o   o   o
+|       |   |   |   |   |   | G   G |       |   |   |   |       |
+o---o   o   o   o   o   o   o   o   o   o   o   o   o   o   o---o
+|       |   |   |   |       | G   G |   |   |   |   |   |       |
+o   o   o   o   o   o---o   o---o---o   o   o   o   o   o   o   o
+|   |   |       |       |               |   |   |   |   |   |   |
+o   o   o   o   o---o   o---o   o---o---o   o   o   o   o   o   o
+|   |   |   |       |       |               |   |   |   |   |   |
+o   o   o   o---o   o   o   o---o---o   o---o   o   o   o   o   o
+|   |   |       |       |                       |   |   |   |   |
+o---o   o---o---o---o   o---o---o---o---o---o---o   o   o   o   o
+|               |   |                               |   |   |   |
+o---o---o   o   o   o   o---o---o---o---o---o   o---o   o   o   o
+|   |       |   |   |                                   |   |   |
+o   o   o   o   o   o---o---o---o---o---o---o---o   o---o   o   o
+|       |       |                               |           |   |
+o   o---o---o   o---o---o---o   o   o---o---o---o---o   o---o   o
+| S                             |                               |
+o---o---o---o---o---o---o---o---o---o---o---o---o---o---o---o---o
+"""
+
+
 maze_lines = maze.strip().split("\n")
 
 def get_walls_from_maze_for(cell_x: int, cell_y: int):
@@ -136,7 +173,7 @@ SCALE = 64 / 18
 
 CELL_COUNT = 16
 CELL_SIZE = 18 * SCALE
-WALL_THICKNESS = 4
+WALL_THICKNESS = 1.2 * SCALE
 
 MAZE_SIZE = CELL_COUNT * CELL_SIZE + WALL_THICKNESS * 3
 
@@ -231,7 +268,7 @@ def fast_ray_march(
                         return ray_origin_world + ray_dir_normalized * current_distance_to_boundary, True
                 elif ray_step_x < 0: # Moving Left
                     if current_cell.wall_left:
-                        return ray_origin_world + ray_dir_normalized * current_distance_to_boundary, True
+                        return ray_origin_world + ray_dir_normalized * current_distance_to_boundary + np.array([WALL_THICKNESS, 0]), True
             else: # Advancing in Y
                 if ray_step_y > 0: # Moving "Up" in world coords (positive Y)
                                    # Corresponds to checking 'top' wall of cell in a typical grid depiction
@@ -252,7 +289,7 @@ def fast_ray_march(
                              return ray_origin_world + ray_dir_normalized * current_distance_to_boundary, True
                 elif ray_step_y < 0: # Moving "Down" in world coords (negative Y)
                         if current_cell.wall_bottom: # Wall at the negative Y face of cell (map_x, map_y)
-                            return ray_origin_world + ray_dir_normalized * current_distance_to_boundary, True
+                            return ray_origin_world + ray_dir_normalized * current_distance_to_boundary + np.array([0, WALL_THICKNESS]), True
         
         # Advance to next cell
         if advancing_in_x:
@@ -288,7 +325,7 @@ def update_tof_sensor_data_ray_marching(
     pos: np.ndarray,
     rot: float,
     maze: list[list[Cell]],
-    noise_factor: float = 0.005 # 0.5% of distance for noise std dev
+    noise_factor: float = 0 #0.005 # 0.5% of distance for noise std dev
 ):
     """
     Updates ToF sensor data using fast ray marching.
@@ -616,15 +653,14 @@ class Mouse(Body):
         # self.kalman.update_position(measured_x, measured_y)
     
     def get_tof_reading(self, index):
-
-
         point = self.sensor_data[index]
-        distance = np.linalg.norm(self.pos - point) / SCALE
+        distance = np.linalg.norm(get_tof_location_from_mouse(self.pos, self.rot, index) - point) / SCALE
 
         distance *= 10.0 # to mm 
         return distance, self.sensor_data_valid[index]
     
     def draw(self, surface):
+        print('justas is awesome')
         rotated_image = pg.transform.rotate(self.image, math.degrees(-self.rot - np.pi / 2))
         rotated_rect = rotated_image.get_rect(center=self.pos)
         surface.blit(rotated_image, rotated_rect)
@@ -638,7 +674,7 @@ class Mouse(Body):
 
         for dir, point in enumerate(self.sensor_data):
             color = (255, 0, 0) if dir == 0 else (0, 255, 0)  # Front sensor in red, others in green
-            pg.draw.line(surface, color, self.pos, point, 1)
+            pg.draw.line(surface, color, get_tof_location_from_mouse(self.pos, self.rot, dir), point, 1)
 
 class PgRenderer:
     width: int = MAZE_SIZE
@@ -684,6 +720,8 @@ class PgRenderer:
                 if x == CELL_COUNT - 1:
                     cell.wall_right = True
         self.refresh_walls()
+
+        self.particles = []
 
 
     # def toggle_wall(self, x, y, direction, drag_id=None):
@@ -731,6 +769,9 @@ class PgRenderer:
     #             else:
     #                 self.toggle_wall(x, y, Direction.TOP, drag_id)
     #         self.refresh_walls()
+
+    def set_particles(self, particles):
+        self.particles = particles
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -788,7 +829,7 @@ class PgRenderer:
         for wall in self.walls:
             aabb = wall.transformed_shape.aabb
             m = aabb[0] - aabb[1]
-            pg.draw.rect(self.surface, (240, 0, 0), pg.Rect(m[0], m[1], aabb[1][0] * 2, aabb[1][1] * 2), WALL_THICKNESS)
+            pg.draw.rect(self.surface, (240, 0, 0), pg.Rect(m[0], m[1], aabb[1][0] * 2, aabb[1][1] * 2), int(WALL_THICKNESS))
 
         # Draw corners as filled circles 
         for y in range(CELL_COUNT + 1):
@@ -798,6 +839,17 @@ class PgRenderer:
                 pg.draw.circle(self.surface, (240, 240, 240), (px, py), WALL_THICKNESS // 2 + 1)
 
         self.surface = pg.transform.flip(self.surface, False, True)
+
+        for particle in self.particles:
+            x, y, rot = particle
+            x = x * SCALE 
+            y = 16 * CELL_SIZE - y * SCALE
+            rot -= np.pi
+
+            pg.draw.circle(self.surface, (255, 255, 0), (int(x), int(y)), 4)
+            end_x = x + math.cos(rot) * 20
+            end_y = y + math.sin(rot) * 20
+            pg.draw.line(self.surface, (255, 255, 0), (int(x), int(y)), (int(end_x), int(end_y)), 2)
 
         return self.surface
 

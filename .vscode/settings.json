@@ -122,6 +122,7 @@
         "queue": "cpp",
         "stack": "cpp",
         "__config": "cpp",
-        "__tree": "cpp"
+        "__tree": "cpp",
+        "driver_mpu6500_fifo.h": "c"
     }
 }

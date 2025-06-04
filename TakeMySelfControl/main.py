@@ -375,11 +375,32 @@ class TakeMySelfControl(QMainWindow):
                                     continue
 
                                 tof_reading, tof_valid = self.pg_renderer.mouse.get_tof_reading(sensor)
-                                await write(f"{tof_reading} {'t' if tof_valid else 'f'}\n")
+                                await write(f"{int(tof_reading)} {'t' if tof_valid else 'f'}\n")
                                 continue
+                            elif command == "readIMU":
+                                AX = 0.0
+                                AY = 0.0
+                                GYRO_Z = self.pg_renderer.mouse.omega
+
+                                await write(f"{AX} {AY} {GYRO_Z}\n")
+                            elif command == "vizPARTICLES":
+                                particles = []
+                                # read triplet of points for each particle, floats are in "parts"
+                                for i in range(2, len(parts), 3):
+                                    if i + 2 >= len(parts):
+                                        break
+                                    try:
+                                        x = float(parts[i]) / 10 # Convert to cm
+                                        y = float(parts[i + 1]) / 10 # Convert to cm
+                                        rot = float(parts[i + 2])
+                                        particles.append((x, y, rot))
+                                    except ValueError:
+                                        output_buffer.append(f">>> Invalid particle data: {parts[i:i+3]}\n")
+                                        break
+                                self.pg_renderer.set_particles(particles)
                             else:
                                 output_buffer.append(f"Unknown command: {line.strip()}\n")
-                                continue 
+                                continue                             
                         else:
                             # --- Regular line: add to buffer ---
                             output_buffer.append(line)

@@ -35,30 +35,21 @@ public:
     float readPOS();
 };
 
-struct TOF_Reading
-{
-    float distance = 0;
-    bool valid = false;
-};
-
 enum class TOF_Direction
 {
     FRONT = 0,
     LEFT = 1,
     RIGHT = 2,
     FRONT_LEFT_45 = 3,
-    FRONT_RIGHT_45 = 4
+    FRONT_RIGHT_45 = 4,
+    COUNT
 };
+
+#define NUM_TOF_SENSORS ((int) TOF_Direction::COUNT)
 
 void global_init();
 void global_read_tofs();
-
-/*
- * Returns the reading of the chosen TOF sensor in millimeters.
- * If the reading is invalid (underflow or overflow), the
- * "valid" flag will be set to false.
- */
-TOF_Reading global_get_tof(TOF_Direction direction);
+void global_read_imu();
 
 // This is only for simulation...
 void setWall_UI(int x, int y, Direction direction);
@@ -69,12 +60,22 @@ bool stdio_usb_connected();
 void sleep_ms(uint32_t ms);
 }
 
-inline volatile Cell MAZE_MATRIX[MAZE_SIZE][MAZE_SIZE] = {}; // Init to empty with = {};
+inline Cell MAZE_MATRIX[MAZE_SIZE][MAZE_SIZE] = {}; // Init to empty with = {};
 inline volatile byte FLOOD_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
 inline volatile byte FLOOD_GEN_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
 inline volatile byte MOVE_MATRIX[MAZE_SIZE][MAZE_SIZE];
 inline volatile byte CURRENT_FLOOD_GEN = 0;
 inline Pose POSE = {0, 0, 0, 0, 0};
+
+//
+// Sensor readings, long range one is updated around 40 Hz, short range ones around 20 Hz
+//
+inline int MM[5] = {0};
+inline bool MM_VALID[5] = {false, false, false, false, false};
+
+inline float AX = 0.0f;
+inline float AY = 0.0f;
+inline float GYRO_Z = 0.0f;
 
 inline void setWall(Location location, Direction dir, WallState state)
 {
