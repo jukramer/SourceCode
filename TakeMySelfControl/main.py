@@ -301,7 +301,6 @@ class TakeMySelfControl(QMainWindow):
                             break
 
                         line = line.decode('utf-8')
-                        print(line, end="")
 
                         # --- Special handling for ">>>" commands ---
                         if line.startswith(">>>"):
@@ -345,7 +344,6 @@ class TakeMySelfControl(QMainWindow):
                                     continue
 
                                 rpm_value = self.pg_renderer.mouse.left_rpm if motor == "left" else self.pg_renderer.mouse.right_rpm
-                                print(f"RPM value for {motor} motor: {rpm_value}")
 
                                 await write(f"{rpm_value}\n")
                                 continue
@@ -403,7 +401,6 @@ class TakeMySelfControl(QMainWindow):
                 await self.process.wait()
                 self.process = None
             except Exception as e:
-                print(f"Exception in run(): {e}")
                 self.text_box.write(f"Exception in run(): {e}\n")
                 
             on_run_complete()

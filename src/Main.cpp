@@ -337,15 +337,18 @@ int main()
 
     while (true)
     {
-        // global_read_tofs();
+        
 
         // auto reading = global_get_tof(TOF_Direction::FRONT);
         // printf("TOF Front: %f Valid: %d\n", reading.distance, (int)reading.valid);
 
-        sleep_ms(100);
+        // sleep_ms(100);
 
         if (stdio_usb_connected())
         {
+            global_read_tofs();
+            continue;
+
             ;
             /*std::vector<Command> commands = stateMachineSimple("FFLRFF");
 
@@ -353,6 +356,8 @@ int main()
             {
                 printf("%s %f ", command.action, command.value);
             }*/
+        } else {
+            sleep_ms(100);
         }
 
         POSE = getCurrentPose();
