@@ -47,7 +47,7 @@ float Motor::readPOS() {
 
     float dist = 0.0f;
     scanf("%f", &dist);
-    
+
     if (prevDist == 0.0f) {
         prevDist = dist;
     }

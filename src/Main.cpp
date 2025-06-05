@@ -3,6 +3,7 @@
 #include <math.h>
 #include <vector>
 #include <random>
+#include <ctime>
 
 #ifndef M_PI
     #define M_PI 3.14159265358979323846
@@ -310,51 +311,12 @@ public:
 VController VContr(KP_V, KI_V, KD_V);
 WController WContr(KP_W, KI_W, KD_W);
 SteeringController SContr(KP_S, KI_S, KD_S);
-StanleyController StanContr(K_CTSTAN, K_SSTAN, NULL);
+StanleyController StanContr(K_CTSTAN, K_SSTAN, 0.0);
 
 Motor MotorL(Motor_Choice::LEFT);
 Motor MotorR(Motor_Choice::RIGHT);
 
 using string = const char *;
-
-template <typename T, size_t N = 512>
-class Array
-{
-private:
-    T buffer[N];
-    size_t size_ = 0;
-
-public:
-    void push_back(const T &val)
-    {
-        if (size_ < N)
-        {
-            buffer[size_++] = val;
-        }
-        else
-        {
-            printf("Out of space\n");
-        }
-    }
-    T &operator[](size_t idx) { return buffer[idx]; }
-    size_t size() const { return size_; }
-};
-
-class Trajectory
-{
-public:
-    Trajectory(Array<string> &commands)
-    {
-        for (int i = 0; i < commands.size(); i++)
-        {
-            string command = commands[i];
-        }
-    }
-
-    /*StatePrediction getPos()
-    {
-    }*/
-};
 
 void motorTest(Motor &Motor)
 {
@@ -1227,9 +1189,15 @@ int main()
     printf("  Hit Something: %s\n", hit_result.hit_something ? "true" : "false");
 #endif
 
+    uint64_t tPrev = time_us_64();
     while (true)
-    {
+    {        
         global_read_tofs();
+        global_read_imu();
+     
+        uint64_t tNow = time_us_64();
+        float dt = (tNow - tPrev) / 1e6f; // Convert microseconds to seconds
+        tPrev = tNow;
 
         float dx_left = MotorL.readPOS();
         float dx_right = MotorR.readPOS();
@@ -1241,6 +1209,8 @@ int main()
 
         printf("dx_left: %.2f mm, dx_right: %.2f mm\n", dx_left, dx_right);
 
+        float rps = GYRO_Z * (float)M_PI / 180.0f; // Convert degrees per second to radians per second
+        float drot_rad = rps * dt; // Change in rotation in radians
         motion_update(dx_world, dy_world, drot_rad);
 
         printf(">>> vizPARTICLES ");

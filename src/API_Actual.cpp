@@ -225,9 +225,9 @@ void global_init()
     //
     // Turn on LEDs
     //
-    // gpio_init(22);
-    // gpio_set_dir(22, GPIO_OUT);
-    // gpio_put(22, 1); // Set GPIO 22 high to indicate the program has started
+    gpio_init(22);
+    gpio_set_dir(22, GPIO_OUT);
+    gpio_put(22, 1); // Set GPIO 22 high to indicate the program has started
 
     pico_led_init();
     pico_set_led(true);

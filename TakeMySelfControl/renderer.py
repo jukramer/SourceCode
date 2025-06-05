@@ -660,7 +660,6 @@ class Mouse(Body):
         return distance, self.sensor_data_valid[index]
     
     def draw(self, surface):
-        print('justas is awesome')
         rotated_image = pg.transform.rotate(self.image, math.degrees(-self.rot - np.pi / 2))
         rotated_rect = rotated_image.get_rect(center=self.pos)
         surface.blit(rotated_image, rotated_rect)
