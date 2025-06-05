@@ -2,6 +2,8 @@
 
 #include "common.h"
 
+void floodFill();
+
 enum class Motor_Choice {
     LEFT = 0,
     RIGHT = 1
@@ -64,10 +66,10 @@ void sleep_ms(uint32_t ms);
 }
 
 inline Cell MAZE_MATRIX[MAZE_SIZE][MAZE_SIZE] = {}; // Init to empty with = {};
-inline volatile byte FLOOD_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
-inline volatile byte FLOOD_GEN_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
-inline volatile byte MOVE_MATRIX[MAZE_SIZE][MAZE_SIZE];
-inline volatile byte CURRENT_FLOOD_GEN = 0;
+inline byte FLOOD_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
+inline byte FLOOD_GEN_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
+inline byte MOVE_MATRIX[MAZE_SIZE][MAZE_SIZE];
+inline byte CURRENT_FLOOD_GEN = 0;
 
 //
 // Sensor readings, long range one is updated around 40 Hz, short range ones around 20 Hz

@@ -164,21 +164,11 @@ void Motor::update()
     this->DELTA_POS = deltaPos;
 }
 
-void Motor::updateSmooth() {
-    uint64_t now = time_us_64();
-    double pulses = double(*totalTicks - prevTicksRPM);
-    float dt_us = (now - tPrev);
-
-        
-}
-
 uint pwm_setup(uint gpio)
 {
     gpio_set_function(gpio, GPIO_FUNC_PWM);
     uint slice = pwm_gpio_to_slice_num(gpio);
     pwm_set_enabled(slice, true);
-    pwm_set_wrap(slice, 255); // 8-bit PWM
-    return slice;
 }
 
 void pico_led_init()

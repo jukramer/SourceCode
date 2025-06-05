@@ -96,8 +96,21 @@ void floodFill()
 {
     auto begin = time_us_64();
 
+    STATE = STATE_MAP_EXPLORE;
+
     CURRENT_FLOOD_GEN++;
     floodQueue.reset();
+
+    // Set high value
+    for (int i; i<15; i++) {
+        for (int j; j<15; j++) {
+            if (!(i==7 || i==8 || j==7 || j==8)) {
+                FLOOD_MATRIX[j][i] = 255;
+            }
+        }
+    }
+
+    // printMaze();
 
     if (STATE == STATE_MAP_EXPLORE)
     {
@@ -191,11 +204,11 @@ bool isGoalCell(int x, int y) {
 }
 
 // Function to find the fastest path from {0,15} to a goal cell
-std::string findFastestPath(int floodMatrix[16][16]) {
+std::string findFastestPath() {
     std::string path; // Dynamic string for path commands
 
     // Starting position and heading
-    int x = 0, y = 15; // Starting at {0,15} (floodMatrix[15][0])
+    int x = 0, y = 15; // Starting at {0,15} (FLOOD_MATRIX[15][0])
     Heading heading = Heading::NORTH; // Assume initial heading is North
 
     while (!isGoalCell(x, y)) {
@@ -233,8 +246,8 @@ std::string findFastestPath(int floodMatrix[16][16]) {
 
         // Check forward cell
         if (forwardY >= 0 && forwardY < 16 && forwardX >= 0 && forwardX < 16 &&
-            floodMatrix[forwardY][forwardX] < minValue) {
-            minValue = floodMatrix[forwardY][forwardX];
+            FLOOD_MATRIX[forwardY][forwardX] < minValue) {
+            minValue = FLOOD_MATRIX[forwardY][forwardX];
             nextX = forwardX;
             nextY = forwardY;
             moveCommand = 'F';
@@ -242,8 +255,8 @@ std::string findFastestPath(int floodMatrix[16][16]) {
 
         // Check left cell
         if (leftY >= 0 && leftY < 16 && leftX >= 0 && leftX < 16 &&
-            floodMatrix[leftY][leftX] < minValue) {
-            minValue = floodMatrix[leftY][leftX];
+            FLOOD_MATRIX[leftY][leftX] < minValue) {
+            minValue = FLOOD_MATRIX[leftY][leftX];
             nextX = leftX;
             nextY = leftY;
             moveCommand = 'L';
@@ -251,14 +264,14 @@ std::string findFastestPath(int floodMatrix[16][16]) {
 
         // Check right cell
         if (rightY >= 0 && rightY < 16 && rightX >= 0 && rightX < 16 &&
-            floodMatrix[rightY][rightX] < minValue) {
-            minValue = floodMatrix[rightY][rightX];
+            FLOOD_MATRIX[rightY][rightX] < minValue) {
+            minValue = FLOOD_MATRIX[rightY][rightX];
             nextX = rightX;
             nextY = rightY;
             moveCommand = 'R';
         }
 
-        // If no valid move is found, stop (shouldn't happen with correct floodMatrix)
+        // If no valid move is found, stop (shouldn't happen with correct FLOOD_MATRIX)
         if (moveCommand == '\0') {
             path += 'S';
             break;
@@ -322,7 +335,7 @@ std::string findFastestPath(int floodMatrix[16][16]) {
     
 // }
 
-/*
+
 std::string fastestPath()
 {
     // TODO: encourage to take diagonals
@@ -331,7 +344,7 @@ std::string fastestPath()
     std::string path = "";
 
     Location currentCell = {0, 15};
-    Direction currentDir = TOP;
+    Direction currentDir = Direction::TOP;
     // Initial point
     for (int i = 0; i < 100; i++)
     {
@@ -339,7 +352,7 @@ std::string fastestPath()
         int minFloodFill = 255;
         int x1, y1;
 
-        uint8_t mask = moveMask[currentCell.y][currentCell.x];
+        uint8_t mask = MOVE_MATRIX[currentCell.y][currentCell.x];
         for (int i = 0; i < 4; ++i)
         {
             if (!(mask & (1 << i)))
@@ -348,9 +361,9 @@ std::string fastestPath()
             int nx = currentCell.x + DIRECTIONS[i].x;
             int ny = currentCell.y + DIRECTIONS[i].y;
 
-            if (floodMatrix[ny][nx] <= minFloodFill)
+            if (FLOOD_MATRIX[ny][nx] <= minFloodFill)
             {
-                minFloodFill = floodMatrix[ny][nx];
+                minFloodFill = FLOOD_MATRIX[ny][nx];
                 minFloodFillDir = (Direction)i;
                 x1 = nx;
                 y1 = ny;
@@ -375,12 +388,12 @@ std::string fastestPath()
             std::cout << "Pushing R..." << std::endl;
         }
 
-        std::cout << currentCell.x << " " << currentCell.y << " --> " << x1 << " " << y1 << " " << floodMatrix[y1][x1] << std::endl;
+        std::cout << currentCell.x << " " << currentCell.y << " --> " << x1 << " " << y1 << " " << FLOOD_MATRIX[y1][x1] << std::endl;
 
         currentCell = {x1, y1};
         currentDir = minFloodFillDir;
         std::cout << currentDir << " " << minFloodFillDir << std::endl;
-        if (floodMatrix[y1][x1] == 0)
+        if (FLOOD_MATRIX[y1][x1] == 0)
         {
             std::cout << "Breaking" << std::endl;
             break;
@@ -389,4 +402,4 @@ std::string fastestPath()
     path += 'S';
 
     return path;
-} */
+} 

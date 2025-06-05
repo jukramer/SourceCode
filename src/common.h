@@ -90,7 +90,7 @@ public:
     }
 };
 
-std::string fastestPath(int floodMatrix);
+std::string findFastestPath();
 
 // Ring buffer queue for flood fill
 template <typename T>

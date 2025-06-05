@@ -1,6 +1,6 @@
 #include "API.h"
 #include "common.h"
-#include <string.h>
+#include <string>
 #include <vector>
 #include <random>
 #include <time.h>
@@ -404,6 +404,9 @@ Motor MotorL(Motor_Choice::LEFT);
 Motor MotorR(Motor_Choice::RIGHT);
 
 using string = const char *;
+
+
+
 
 void motorTest(Motor &Motor)
 {
@@ -1366,6 +1369,44 @@ int main()
 {
     global_init();
 
+    parse_maze_string(MAZE_ASCII_ART);
+
+    for (int r = 0; r < MAZE_SIZE; ++r)
+    {
+        for (int c = 0; c < MAZE_SIZE; ++c)
+        {
+            MOVE_MATRIX[r][c] = 255;
+            if (MAZE_MATRIX[r][c].north)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::NORTH);
+            }
+            if (MAZE_MATRIX[r][c].south)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::SOUTH);
+            }
+            if (MAZE_MATRIX[r][c].west)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::WEST);
+            }
+            if (MAZE_MATRIX[r][c].east)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::EAST);
+            }
+        }
+    }
+
+    print_maze();
+
+    floodFill();
+    std::string path = findFastestPath();
+    
+    while (true) {
+        printf("%s\n", path);
+    }
+
+    /*
+
+
     while (true)
     {
         if (stdio_usb_connected())
@@ -1385,8 +1426,7 @@ int main()
 
     Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -90}, Command{"FWD", 2}, Command{"STOP", 0}};
 
-    parse_maze_string(MAZE_ASCII_ART);
-    print_maze();
+    
 
     POSE.x = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
     POSE.y = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
@@ -1536,12 +1576,12 @@ int main()
               targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w,
               targetReached, static_cast<int>(currentMovement), w_ref_stanley_radps, duty_L_percent, duty_R_percent);
             fflush(stdout);*/
-        }
-        sleep_ms(1);
-    }
+        
+        // sleep_ms(1);
+    
 
     return 0;
-}
+} 
 
 /*
 
