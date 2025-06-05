@@ -403,38 +403,52 @@ Motor MotorR(Motor_Choice::RIGHT);
 
 using string = const char *;
 
-/*void motorTest(Motor &Motor)
+void motorTest(Motor &Motor)
 {
     if (stdio_usb_connected())
     {
         printf("Forward...\n");
-        Motor.setPWM(255);
+        Motor.setPWM(100);
         sleep_ms(100);
-        int rpm1 = Motor.readRPM();
+        Motor.update();
+        float rpm1 = Motor.RPM;
         sleep_ms(50);
-        int rpm2 = Motor.readRPM();
+        Motor.update();
+        float rpm2 = Motor.RPM;
         sleep_ms(500);
-        Motor.readRPM();
-        sleep_ms(10);
-        int rpm3 = Motor.readRPM();
-        printf("RPM1: %d RPM2: %d RPM3: %d\n", rpm1, rpm2, rpm3);
+        Motor.update();
+        float rpm3 = Motor.RPM;
+        printf("Forward RPM1: %f RPM2: %f RPM3: %f\n", rpm1, rpm2, rpm3);
+
         sleep_ms(300);
         printf("Stopping...\n");
         Motor.setPWM(0);
         sleep_ms(1000);
 
         printf("Backward...\n");
-        Motor.setPWM(-255);
+        Motor.setPWM(-100);
+        sleep_ms(100);
+        Motor.update();
+        rpm1 = Motor.RPM;
+        sleep_ms(50);
+        Motor.update();
+        rpm2 = Motor.RPM;
+        sleep_ms(500);
+        Motor.update();
+        rpm3 = Motor.RPM;
+        printf("Backward RPM1: %f RPM2: %f RPM3: %f\n", rpm1, rpm2, rpm3);
+
         sleep_ms(300);
 
         printf("Stopping...\n");
         Motor.setPWM(0);
         sleep_ms(1000);
     }
-    else {
+    else
+    {
         Motor.setPWM(0);
     }
-}*/
+}
 
 std::pair<float, float> controlLoop(float vTarget, float wTarget)
 {
@@ -1348,12 +1362,29 @@ Command decide_next_action_tof_based()
 
 int main()
 {
+    global_init();
+
+    while (true)
+    {
+        if (stdio_usb_connected())
+        {
+            printf("---------- TESTING LEFT MOTOR -----------");
+            motorTest(MotorL);
+
+            printf("---------- TESTING RIGHT MOTOR -----------");
+            motorTest(MotorR);
+        }
+        else
+        {
+            MotorR.setPWM(0);
+            MotorL.setPWM(0);
+        }
+    }
+
     Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -90}, Command{"FWD", 2}, Command{"STOP", 0}};
 
     parse_maze_string(MAZE_ASCII_ART);
     print_maze();
-
-    global_init();
 
     POSE.x = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
     POSE.y = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell

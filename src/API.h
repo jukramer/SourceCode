@@ -16,6 +16,8 @@ public:
     float RPM = 0;
     float DELTA_POS = 0;
 
+    float gearRatio;
+
     const volatile int64_t *totalTicks;
     int64_t prevTicks;
 

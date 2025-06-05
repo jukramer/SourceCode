@@ -115,7 +115,7 @@ void Motor::setPWM(float pwm)
     }
 
     // Scale PWM from 0 to 100 to 45 to 255
-    int actualPWM = sign * (pwm * 210) / 100 + 45;
+    int actualPWM = sign * (pwm * 215) / 100 + 40;
 
     if (sign == 1)
     {
