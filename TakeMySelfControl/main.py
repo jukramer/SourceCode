@@ -255,6 +255,134 @@ class TakeMySelfControl(QMainWindow):
 
             self.should_stop = False
 
+            output_buffer = []
+            # Adjust these values based on desired responsiveness vs. performance
+            
+            MAX_BUFFER_LINES = 1  # Max lines to buffer before an update
+            MAX_BUFFER_TIME_S = 0.1 # Max time (e.g., 100ms) before forcing an update
+            
+            last_emit_time = time.monotonic()
+
+            def write(text):
+                if self.process:
+                    print("TO WRITE", text)
+                    self.process.stdin.write(text)
+                    self.process.stdin.flush()
+
+            def handle_line(line):
+                nonlocal last_emit_time
+
+                # --- Special handling for ">>>" commands ---
+                if line.startswith(">>>"):
+                    print("Handling command:", line.strip())
+                    parts = line.split()
+                    if len(parts) < 2:
+                        output_buffer.append(f">>> Error parsing command: {line.strip()}\n") 
+                        return
+                    command = parts[1]
+                    if command == "setPWM":
+                        if len(parts) < 4:
+                            output_buffer.append(f">>> Error parsing setPWM command: {line.strip()}\n")
+                            return
+
+                        motor = parts[2].lower()
+                        if motor != "left" and motor != "right":
+                            output_buffer.append(f">>> Unknown motor: {motor}\n")
+                            return
+
+                        pwm = parts[3]
+                        try:
+                            pwm = float(pwm)
+                            pwm = max(min(pwm, 100.0), -100.0)
+                        except ValueError:
+                            output_buffer.append(f">>> Invalid PWM value: {pwm}\n")
+                            return
+
+                        if motor == "left":
+                            self.pg_renderer.mouse.left_pwm = pwm
+                        else:
+                            self.pg_renderer.mouse.right_pwm = pwm
+                        return
+                    elif command == "readRPM":
+                        if len(parts) < 3:
+                            output_buffer.append(f">>> Error parsing readRPM command: {line.strip()}\n")
+                            return
+                        
+                        motor = parts[2].lower()
+                        if motor != "left" and motor != "right":
+                            output_buffer.append(f">>> Unknown motor: {motor}\n")
+                            return
+
+                        rpm_value = self.pg_renderer.mouse.left_rpm if motor == "left" else self.pg_renderer.mouse.right_rpm
+
+                        write(f"{rpm_value}\n")
+                        return
+                    elif command == "readPOS":
+                        if len(parts) < 3:
+                            print(f">>> Error parsing readPOS command: {line.strip()}\n")
+                            return
+                        
+                        motor = parts[2].lower()
+                        if motor != "left" and motor != "right":
+                            print(f">>> Unknown motor: {motor}\n")
+                            return
+
+                        pos_value = (self.pg_renderer.mouse.left_pos if motor == "left" else self.pg_renderer.mouse.right_pos) * 10
+
+                        write(f"{pos_value}\n")
+                        return
+                    elif command == "readTOF":
+                        if len(parts) < 3:
+                            output_buffer.append(f">>> Error parsing readTOF command: {line.strip()}\n")
+                            return
+                        
+                        try:
+                            sensor = int(parts[2])
+                            if sensor < 0 or sensor >= 5:
+                                raise ValueError("Sensor index out of range")
+                        except ValueError:
+                            output_buffer.append(f">>> Invalid sensor index: {parts[2]}\n")
+                            return
+
+                        tof_reading, tof_valid = self.pg_renderer.mouse.get_tof_reading(sensor)
+                        write(f"{int(tof_reading)} {'t' if tof_valid else 'f'}\n")
+                        return
+                    elif command == "readIMU":
+                        AX = 0.0
+                        AY = 0.0
+                        GYRO_Z = self.pg_renderer.mouse.ang_vel * 180.0 / np.pi  # Convert radians to degrees
+
+                        write(f"{AX} {AY} {GYRO_Z}\n")
+                    elif command == "vizPARTICLES":
+                        particles = []
+                        # read triplet of points for each particle, floats are in "parts"
+                        for i in range(2, len(parts), 3):
+                            if i + 2 >= len(parts):
+                                break
+                            try:
+                                x = float(parts[i]) / 10 # Convert to cm
+                                y = float(parts[i + 1]) / 10 # Convert to cm
+                                rot = float(parts[i + 2])
+                                particles.append((x, y, rot))
+                            except ValueError:
+                                output_buffer.append(f">>> Invalid particle data: {parts[i:i+3]}\n")
+                                break
+                        self.pg_renderer.set_particles(particles)
+                    else:
+                        output_buffer.append(f"Unknown command: {line.strip()}\n")
+                        return                             
+                else:
+                    # --- Regular line: add to buffer ---
+                    output_buffer.append(line)
+                    print(line, end="")
+
+                current_time = time.monotonic()
+                if (len(output_buffer) >= MAX_BUFFER_LINES or (current_time - last_emit_time) >= MAX_BUFFER_TIME_S):
+                    if output_buffer:
+                        self.text_emitter.append_text.emit("".join(output_buffer))
+                        output_buffer.clear()
+                        last_emit_time = current_time
+
             def worker():
                 try:
                     if platform.system() == "Darwin":
@@ -263,7 +391,7 @@ class TakeMySelfControl(QMainWindow):
                             cwd=dir,
                             stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
+                            stderr=subprocess.PIPE,
                             preexec_fn=os.setsid,
                             text=True
                         )
@@ -273,7 +401,7 @@ class TakeMySelfControl(QMainWindow):
                             cwd=dir,
                             stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
+                            stderr=subprocess.PIPE,
                             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
                             text=True
                         )
@@ -281,137 +409,14 @@ class TakeMySelfControl(QMainWindow):
 
                     print("Started process:", self.process)
 
-                    def write(text):
-                        if self.process:
-                            self.process.stdin.write(text)
-                            self.process.stdin.flush()
-
                     def read_stream():
-                        output_buffer = []
-                        # Adjust these values based on desired responsiveness vs. performance
-                        
-                        MAX_BUFFER_LINES = 1  # Max lines to buffer before an update
-                        MAX_BUFFER_TIME_S = 0.1 # Max time (e.g., 100ms) before forcing an update
-                        
-                        last_emit_time = time.monotonic()
-
                         while True:
                             line = self.process.stdout.readline()
                             if not line:
                                 break
                             if self.should_stop:
                                 break
-
-                            # --- Special handling for ">>>" commands ---
-                            if line.startswith(">>>"):
-                                parts = line.split()
-                                if len(parts) < 2:
-                                    output_buffer.append(f">>> Error parsing command: {line.strip()}\n") 
-                                    continue
-                                command = parts[1]
-                                if command == "setPWM":
-                                    if len(parts) < 4:
-                                        output_buffer.append(f">>> Error parsing setPWM command: {line.strip()}\n")
-                                        continue
-
-                                    motor = parts[2].lower()
-                                    if motor != "left" and motor != "right":
-                                        output_buffer.append(f">>> Unknown motor: {motor}\n")
-                                        continue
-
-                                    pwm = parts[3]
-                                    try:
-                                        pwm = float(pwm)
-                                        pwm = max(min(pwm, 100.0), -100.0)
-                                    except ValueError:
-                                        output_buffer.append(f">>> Invalid PWM value: {pwm}\n")
-                                        continue
-
-                                    if motor == "left":
-                                        self.pg_renderer.mouse.left_pwm = pwm
-                                    else:
-                                        self.pg_renderer.mouse.right_pwm = pwm
-                                    continue
-
-                                elif command == "readRPM":
-                                    if len(parts) < 3:
-                                        output_buffer.append(f">>> Error parsing readRPM command: {line.strip()}\n")
-                                        continue
-                                    
-                                    motor = parts[2].lower()
-                                    if motor != "left" and motor != "right":
-                                        output_buffer.append(f">>> Unknown motor: {motor}\n")
-                                        continue
-
-                                    rpm_value = self.pg_renderer.mouse.left_rpm if motor == "left" else self.pg_renderer.mouse.right_rpm
-
-                                    write(f"{rpm_value}\n")
-                                    continue
-                                elif command == "readPOS":
-                                    if len(parts) < 3:
-                                        print(f">>> Error parsing readPOS command: {line.strip()}\n")
-                                        continue
-                                    
-                                    motor = parts[2].lower()
-                                    if motor != "left" and motor != "right":
-                                        print(f">>> Unknown motor: {motor}\n")
-                                        continue
-
-                                    pos_value = self.pg_renderer.mouse.left_pos if motor == "left" else self.pg_renderer.mouse.right_pos
-
-                                    write(f"{pos_value}\n")
-                                    continue
-                                elif command == "readTOF":
-                                    if len(parts) < 3:
-                                        output_buffer.append(f">>> Error parsing readTOF command: {line.strip()}\n")
-                                        continue
-                                    
-                                    try:
-                                        sensor = int(parts[2])
-                                        if sensor < 0 or sensor >= 5:
-                                            raise ValueError("Sensor index out of range")
-                                    except ValueError:
-                                        output_buffer.append(f">>> Invalid sensor index: {parts[2]}\n")
-                                        continue
-
-                                    tof_reading, tof_valid = self.pg_renderer.mouse.get_tof_reading(sensor)
-                                    write(f"{tof_reading} {'t' if tof_valid else 'f'}\n")
-                                    continue
-                                elif command == "readIMU":
-                                    AX = 0.0
-                                    AY = 0.0
-                                    GYRO_Z = self.pg_renderer.mouse.omega
-
-                                    write(f"{AX} {AY} {GYRO_Z}\n")
-                                elif command == "vizPARTICLES":
-                                    particles = []
-                                    # read triplet of points for each particle, floats are in "parts"
-                                    for i in range(2, len(parts), 3):
-                                        if i + 2 >= len(parts):
-                                            break
-                                        try:
-                                            x = float(parts[i]) / 10 # Convert to cm
-                                            y = float(parts[i + 1]) / 10 # Convert to cm
-                                            rot = float(parts[i + 2])
-                                            particles.append((x, y, rot))
-                                        except ValueError:
-                                            output_buffer.append(f">>> Invalid particle data: {parts[i:i+3]}\n")
-                                            break
-                                    self.pg_renderer.set_particles(particles)
-                                else:
-                                    output_buffer.append(f"Unknown command: {line.strip()}\n")
-                                    continue                             
-                            else:
-                                # --- Regular line: add to buffer ---
-                                output_buffer.append(line)
-                                print(line, end="")
-
-                            current_time = time.monotonic()
-                            if (len(output_buffer) >= MAX_BUFFER_LINES or (current_time - last_emit_time) >= MAX_BUFFER_TIME_S):
-                                if output_buffer:
-                                    self.text_emitter.append_text.emit("".join(output_buffer))
-                                    output_buffer.clear()
-                                    last_emit_time = current_time
+                            handle_line(line)   
 
                         # --- Emit any remaining lines after the loop ---
                         if output_buffer:
