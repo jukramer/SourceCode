@@ -120,6 +120,7 @@ struct Command {
 
 inline int currentMovement = IDLE;
 inline bool targetReached = false;
+inline bool running = true;
 inline Pose targetPose = {0, 0, 0, 0, 0};
 inline Pose prevTargetPose = {0, 0, 0, 0, 0};
 
@@ -210,5 +211,5 @@ constexpr Location OFFSET_LOCATIONS[4] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 #define FORWARD 1
 #define BACKWARD -1
 
-#define WHEEL_RADIUS 0.022
-#define WHEEL_BASE 0.076
+#define WHEEL_RADIUS 2.2
+#define WHEEL_BASE 7.6

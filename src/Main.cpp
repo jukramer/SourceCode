@@ -1,5 +1,6 @@
 #include "API.h"
 #include "common.h"
+#include <string.h>
 #include <math.h>
 #include <vector>
 
@@ -20,9 +21,9 @@
 #define K_CTSTAN 1.0 // Stanley controller
 #define K_SSTAN 0.05 
 
-#define CELL_WIDTH 0.18
+#define CELL_WIDTH 18
 
-#define V_MAX 2.0
+#define V_MAX 3
 #define TURN_RADIUS (CELL_WIDTH/2.0)
 #define W_MAX (V_MAX/TURN_RADIUS)
 
@@ -375,12 +376,14 @@ std::pair<double, double> controlLoop(float vTarget, float wTarget)
     float vCurrentL = rpmCurrentL * WHEEL_RADIUS / 60;
     float vCurrentR = rpmCurrentR * WHEEL_RADIUS / 60;
     float vCurrentAVG = (vCurrentL + vCurrentR) / 2;
+    POSE.v = (double)vCurrentAVG;
     float wCurrent = (vCurrentR - vCurrentL) / WHEEL_BASE;
+    POSE.w = (double)wCurrent;
 
     double vOut = VContr.output(vTarget, vCurrentAVG);
     double wOut = WContr.output(wTarget, wCurrent);
-    double sOut = StanContr.output();
-    wOut += sOut;
+    // double sOut = StanContr.output();
+    // wOut += sOut;
 
     printf("VOut: %f WOut: %f rpmL: %f rpmR: %f vL: %f vR: %f W: %f\n", vOut, wOut, rpmCurrentL, rpmCurrentR, vCurrentL, vCurrentR, wCurrent);
 
@@ -406,8 +409,8 @@ inline Pose getCurrentPose() {
     printf("Pos updates: dPos: %f dTheta: %f\n", dPos, dTheta);
 
     // Update pose
-    x += dPos*cos(POSE.theta);
-    y += dPos*cos(POSE.theta);
+    x += dPos*sin(POSE.theta*M_PI/180.0);
+    y += dPos*cos(POSE.theta*M_PI/180.0);
     theta += dTheta;
     Pose newPose = {x, y, theta, POSE.v, POSE.w};
 
@@ -419,21 +422,23 @@ inline Pose getCurrentPose() {
 void setTarget(Command command) {
     prevTargetPose = targetPose;
     targetReached = false;
-    if (command.action == "FWD") {
+    if (0 == strcmp(command.action, "FWD")) {
+        printf("Setting FWD target...\n");
         // Forward for command.value cells
         currentMovement = FWD;
         targetPose.v = V_MAX;
         targetPose.w = 0;
-        if (POSE.theta <= 0.1) {
-            targetPose.y += CELL_WIDTH*command.value;
-        } else if (POSE.theta - 90 <= 0.1) {
-            targetPose.x -= CELL_WIDTH*command.value;
-        } else if (POSE.theta - 180 <= 0.1) {
-            targetPose.y -= CELL_WIDTH*command.value;
-        } else if (POSE.theta - 270 <= 0.1) {
-            targetPose.x += CELL_WIDTH*command.value;
+        if (abs(POSE.theta) <= 0.1) {
+            targetPose.y += CELL_WIDTH*double(command.value);
+        } else if (abs(POSE.theta - 90) <= 0.1) {
+            targetPose.x -= CELL_WIDTH*double(command.value);
+        } else if (abs(POSE.theta - 180) <= 0.1) {
+            targetPose.y -= CELL_WIDTH*(double)command.value;
+        } else if (abs(POSE.theta - 270) <= 0.1) {
+            targetPose.x += CELL_WIDTH*(double)command.value;
         }
-    } else if (command.action == "TRN" && command.value==90) {
+
+    } else if (0 == strcmp(command.action, "TRN") && command.value==90) {
         currentMovement = TURN_L;
         targetPose.theta += 90;
         int theta = targetPose.theta;
@@ -453,7 +458,7 @@ void setTarget(Command command) {
             targetPose.x += CELL_WIDTH/2.0;
             targetPose.y += CELL_WIDTH/2.0;
         }
-    } else if (command.action == "TRN" && command.value==-90) {
+    } else if (0 == strcmp(command.action, "TRN") && command.value==-90) {
         currentMovement = TURN_R;
         targetPose.theta -= 90;
         int theta = targetPose.theta;
@@ -475,7 +480,7 @@ void setTarget(Command command) {
             targetPose.y -= CELL_WIDTH/2.0;
         }
 
-    } else if (command.action == "STOP") {
+    } else if (0 == strcmp(command.action, "STOP")) {
         currentMovement = STOP;
         targetPose.v = 0;
         targetPose.w = 0;
@@ -492,8 +497,15 @@ void setTarget(Command command) {
 }
 
 bool checkTargetReached() {
-    if (POSE-targetPose < Pose {0.1, 0.1, 0.1, 0.1, 0.1}) {
-        return true;
+    // if (POSE-targetPose < Pose {0.1, 0.1, 0.1, 0.1, 0.1}) {
+    //     return true;
+    // }
+    if (currentMovement == FWD) {
+        if (targetPose.theta == 0) {
+            if (POSE.y > targetPose.y) {
+                return true;
+            }
+        }
     }
     return false;
 }
@@ -502,21 +514,36 @@ int main()
 {
     global_init();
 
-    setTarget(Command {"FWD", 3});
-    printf("Current Pose: %f %f %f %f %f\nTarget Pose: %f %f %f %f %f\nPrevious Target Pose: %f %f %f %f %f\n", POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w, targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w, prevTargetPose.x, prevTargetPose.y, prevTargetPose.theta, prevTargetPose.v, prevTargetPose.w);
+    Queue<Command> commandQueue = {Command {"FWD", 3}, Command {"STOP", 0}};
+    Command target = commandQueue.pop();
+    printf("Setting target: %s %d\n", target.action, target.value);
+    setTarget(target);
+    printf("Target set!\n");
+    // commandQueue.push(Command {"FWD", 0});
 
+    // setTarget(Command {"FWD", 3});
+    // printf("Current Pose: %f %f %f %f %f\nTarget Pose: %f %f %f %f %f\nPrevious Target Pose: %f %f %f %f %f\n", POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w, targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w, prevTargetPose.x, prevTargetPose.y, prevTargetPose.theta, prevTargetPose.v, prevTargetPose.w);
+ 
     // POSE = {-0.02, 0.02, 15, 0.95*V_MAX, W_MAX};
     // double w = StanContr.output();
 
     // printf("W: %f", w);
 
     while (true) {
-        auto [dutyL, dutyR] = controlLoop(5, 0);
+        POSE = getCurrentPose();
+        printf("Current Pose: %f %f %f %f %f\n", POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w);
+        printf("Target Pose: %f %f %f %f %f\n", targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w);
 
-        MotorL.setPWM((float) dutyL);
-        MotorR.setPWM((float) dutyR);
+        auto [dutyL, dutyR] = controlLoop(targetPose.v, targetPose.w);  
+        printf("Duty L: %f Duty R: %f\n", dutyL, dutyR);
+        MotorL.setPWM(dutyL);
+        MotorR.setPWM(dutyR);
 
-        printf("%f %f\n", dutyL, dutyR);
+        // Set new target if old one reached
+        if (checkTargetReached()) {
+            printf("##########################\n########################\nTARGET REACHED!!!!!!!!!!!!!!!!!!!!!!!!!!\n#########################################3\n#########################################\n");
+            setTarget(commandQueue.pop());
+        }
     }
     
     // double vtarg = 5.0;
@@ -532,9 +559,7 @@ int main()
     // printf("%f %f %f %f %f %f\n", vout1, vout2, vout3, wout1, wout2, wout3);
     // std::vector<Command> commands = stateMachineSimple("FLFLS");
 
-    // Queue<Command> commandQueue = {Command {"STOP", 0}, Command {"FWD", 3}};
-    // setTarget(commandQueue.pop());
-    // // commandQueue.push(Command {"FWD", 0})
+   
 
     while (true)
     {

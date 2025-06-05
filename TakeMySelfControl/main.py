@@ -345,7 +345,7 @@ class TakeMySelfControl(QMainWindow):
 
                                     rpm_value = self.pg_renderer.mouse.left_rpm if motor == "left" else self.pg_renderer.mouse.right_rpm
 
-                                    await write(f"{rpm_value}\n")
+                                    write(f"{rpm_value}\n")
                                     continue
                                 elif command == "readPOS":
                                     if len(parts) < 3:
@@ -359,7 +359,7 @@ class TakeMySelfControl(QMainWindow):
 
                                     pos_value = self.pg_renderer.mouse.left_pos if motor == "left" else self.pg_renderer.mouse.right_pos
 
-                                    await write(f"{pos_value}\n")
+                                    write(f"{pos_value}\n")
                                     continue
                                 elif command == "readTOF":
                                     if len(parts) < 3:
@@ -375,7 +375,7 @@ class TakeMySelfControl(QMainWindow):
                                         continue
 
                                     tof_reading, tof_valid = self.pg_renderer.mouse.get_tof_reading(sensor)
-                                    await write(f"{tof_reading} {'t' if tof_valid else 'f'}\n")
+                                    write(f"{tof_reading} {'t' if tof_valid else 'f'}\n")
                                     continue
                                 else:
                                     output_buffer.append(f"Unknown command: {line.strip()}\n")
