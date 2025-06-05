@@ -24,24 +24,34 @@ Motor::Motor(Motor_Choice choice)
     this->choice = choice;
 }
 
-void Motor::setPWM(float PWM)
+void Motor::setPWM(float pwm)
 {
+    pwm = fmaxf(fminf(pwm, 100.0f), -100.0f); // Cap PWM to [-100, 100]
+    this->PWM = pwm;
+
+    int sign = 1;
+    if (pwm < 0.0)
+    {
+        DIR = BACKWARD;
+    }
+    else
+    {
+        DIR = FORWARD;
+    }
+    
     printf(">>> setPWM %s %f\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT", PWM);
     fflush(stdout);
 }
 
-float Motor::readRPM()
-{
+void Motor::update() {
     printf(">>> readRPM %s\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT");
     fflush(stdout);
 
     float rpm = 0.0f;
     scanf("%f", &rpm);
 
-    return rpm;
-}
+    this->RPM = rpm;
 
-float Motor::readPOS() {
     printf(">>> readPOS %s\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT");
     fflush(stdout);
 
@@ -55,7 +65,7 @@ float Motor::readPOS() {
     float result = dist - prevDist;
     prevDist = dist;
 
-    return result;
+    this->DELTA_POS = result;
 }
 
 void global_init()

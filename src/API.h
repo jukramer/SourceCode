@@ -10,7 +10,14 @@ enum class Motor_Choice {
 class Motor
 {
 public:
-    int PWM = 0;
+    float PWM = 0;
+
+    // These two are updated every frame
+    float RPM = 0;
+    float DELTA_POS = 0;
+
+    // This is changed when setPWM is called
+    int DIR = FORWARD;
 
     const volatile uint *totalTicks;
     uint prevTicksRPM;
@@ -20,10 +27,8 @@ public:
     int pinBackward;
     int pinPWM;
     int pinENC;
-    int dir = FORWARD;
 
     uint64_t tPrev;
-
     float prevDist = 0.0f;
 
     Motor_Choice choice;
@@ -31,8 +36,7 @@ public:
     Motor(Motor_Choice choice);
 
     void setPWM(float PWM);
-    float readRPM();
-    float readPOS();
+    void update();
 };
 
 enum class TOF_Direction
@@ -65,7 +69,6 @@ inline volatile byte FLOOD_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
 inline volatile byte FLOOD_GEN_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
 inline volatile byte MOVE_MATRIX[MAZE_SIZE][MAZE_SIZE];
 inline volatile byte CURRENT_FLOOD_GEN = 0;
-inline Pose POSE = {0, 0, 0, 0, 0};
 
 //
 // Sensor readings, long range one is updated around 40 Hz, short range ones around 20 Hz

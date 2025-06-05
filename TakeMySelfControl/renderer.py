@@ -861,7 +861,7 @@ class PgRenderer:
             x, y, rot = particle
             x = x * SCALE 
             y = 16 * CELL_SIZE - y * SCALE
-            rot -= np.pi
+            rot = -rot
 
             pg.draw.circle(self.surface, (255, 255, 0), (int(x), int(y)), 4)
             end_x = x + math.cos(rot) * 20

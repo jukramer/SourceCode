@@ -1,528 +1,55 @@
 #include "API.h"
 #include "common.h"
-#include <math.h>
 #include <vector>
 #include <random>
-#include <ctime>
+#include <time.h>
+#include <math.h>
 
-#ifndef M_PI
-    #define M_PI 3.14159265358979323846
-#endif
+#define PI 3.14159265358979323846f // Define PI constant
 
 // Controller Constants
-#define KP_V 200.0 // Velocity controller
-#define KI_V 40.0
-#define KD_V 5.32089706902006
-#define KP_W 50.0 // Angular velocity controller
-#define KI_W 5.0
-#define KD_W 0.238664893739785
-#define KP_S 1.0 // Steering controller
-#define KI_S 1.0
-#define KD_S 0.0
-#define K_CTSTAN 1.0 // Stanley controller
-#define K_SSTAN 0.05 
+#define KP_V 2.0f   // Velocity controller (tuned for mm/s)
+#define KI_V 0.4f  // (tuned for mm/s)
+// KD_V not used in VController currently
+#define KP_W 50.0f  // Angular velocity controller (rad/s)
+#define KI_W 5.0f  // (rad/s)
+// KD_W not used in WController currently
+#define K_CTSTAN 1.0f  // Stanley controller cross-track gain
+#define K_SSTAN 5.0f   // Stanley controller smoothing gain (mm/s)
 
-#define CELL_WIDTH 0.18
+// Maze and Robot Dimensions (all in millimeters or radians)
+#define CELL_WIDTH 180.0f       // mm
+#define V_MAX 250.0f            // mm/s (Reduced V_MAX for more stable testing initially)
+#define TURN_RADIUS (CELL_WIDTH / 2.0f) // mm
+#define W_MAX_NOMINAL (V_MAX / TURN_RADIUS) // Nominal angular velocity for turns (rad/s)
 
-#define V_MAX 2.0
-#define TURN_RADIUS (CELL_WIDTH / 2.0)
-#define W_MAX (V_MAX / TURN_RADIUS)
+#define WHEEL_RADIUS_MM 16.0f   // mm
+#define WHEEL_BASE_MM 80.0f     // mm
 
-class VController
+#define SENSOR_NOISE_STDDEV 1.0f // mm
+const float SENSOR_NOISE_VAR = SENSOR_NOISE_STDDEV * SENSOR_NOISE_STDDEV;
+
+#define EPSILON 1e-6f
+
+struct Pose
 {
-public:
-    double ePrev = 0;
-    double eTot = 0;
+    float x;     // mm
+    float y;     // mm
+    float theta; // radians, [-PI, PI), 0 along +X, PI/2 along +Y (CCW positive)
+    float v;     // linear velocity, mm/s
+    float w;     // angular velocity, rad/s (CCW positive)
 
-    double Kp;
-    double Ki;
-    double Kd;
-
-    // int tPrev;
-    uint64_t tPrev;
-    // int64_t tPrev;
-
-    VController(double Kp, double Ki, double Kd)
-    {
-        this->Kp = Kp;
-        this->Ki = Ki;
-        this->Kd = Kd;
-
-        tPrev = time_us_64();
-    }
-
-    double output(double vRef, double vCurrent)
-    {
-        double e = vRef - vCurrent;
-
-        uint64_t t = time_us_64(); //[us]
-
-        double dt = double(t - tPrev) / 1000000.0; // [s]
-
-        printf("dt: %f Current time: %lld Previous time: %lld e: %f eTot: %f\n", dt, t, tPrev, e, eTot);
-
-        // std::cout<<"dt: "<<dt<<"Current time: "<<t<<" Previous time: "<<tPrev<<std::endl;
-        // std::cout<<"eTot: "<<eTot<<std::endl;
-        eTot += e * dt;
-
-        double output = Kp * e + Ki * eTot;
-
-        this->tPrev = t;
-        ePrev = e;
-
-        return output;
-    }
-
-    void reset()
-    {
-        eTot = 0;
-        tPrev = time_us_64();
-    }
+    Pose(float _x=0.f, float _y=0.f, float _theta=0.f, float _v=0.f, float _w=0.f)
+        : x(_x), y(_y), theta(_theta), v(_v), w(_w) {}
 };
 
-class WController
-{
-public:
-    double ePrev = 0;
-    double eTot = 0;
 
-    double Kp;
-    double Ki;
-    double Kd;
+enum MovementType { FWD, TURN_L, TURN_R, STOP_CMD, IDLE };
 
-    uint64_t tPrev;
-
-    WController(double Kp, double Ki, double Kd)
-    {
-        this->Kp = Kp;
-        this->Ki = Ki;
-        this->Kd = Kd;
-
-        tPrev = time_us_64();
-    }
-
-    double output(double wRef, double wCurrent)
-    {
-        double e = wRef - wCurrent;
-
-        uint64_t t = time_us_64();
-
-        double dt = double(t - tPrev) / 1000000;
-
-        eTot += e * dt;
-
-        double output = Kp * e + Ki * eTot;
-
-        ePrev = e;
-        tPrev = t;
-
-        return int(output);
-    }
-
-    void reset()
-    {
-        eTot = 0;
-        tPrev = time_us_64();
-    }
+struct Command {
+    std::string action; // "FWD", "TRN", "STOP"
+    float value;        // cells for FWD, radians for TRN (positive for left)
 };
-
-class SteeringController
-{
-public:
-    double ePrev = 0;
-    double eTot = 0;
-    double tPrev;
-
-    double Kp;
-    double Ki;
-    double Kd;
-
-    SteeringController(double Kp, double Ki, double Kd)
-    {
-        this->Kp = Kp;
-        this->Ki = Ki;
-        this->Kd = Kd;
-
-        tPrev = time_us_64();
-    }
-
-    int output(double diffTOF)
-    {
-        int t = time_us_64();
-        double dt = (t - tPrev) / 1000000;
-
-        eTot += diffTOF * dt;
-
-        double output = Kp * diffTOF + Ki * eTot;
-        ePrev = diffTOF;
-
-        return output;
-    }
-};
-
-class StanleyController
-{
-public:
-    double K_CT; // Cross-track gain
-    double K_S;  // Smoothing gain
-    double maxDelta;
-
-    StanleyController(double K_CT, double K_S, double maxDelta)
-    {
-        this->K_CT = K_CT;
-        this->K_S = K_S;
-        this->maxDelta = maxDelta;
-    }
-
-    double output()
-    {
-        if (currentMovement == FWD)
-        {
-            double e = 0;
-
-            if (targetPose.theta == 0)
-            {
-                e = POSE.x - targetPose.x; // cross-track error
-            }
-            else if (targetPose.theta == 90)
-            {
-                e = POSE.y - targetPose.y; // cross-track error
-            }
-            else if (targetPose.theta == 180)
-            {
-                e = targetPose.x - POSE.x; // cross-track error
-            }
-            else if (targetPose.theta == 270)
-            {
-                e = targetPose.y - POSE.y; // cross-track error
-            }
-
-            double psi = POSE.theta - targetPose.theta; // heading error
-
-            double delta = psi + atan2(K_CT * e, POSE.v + K_S) * 180 / M_PI;
-
-            double vL = targetPose.v * (1 - tan(delta * M_PI / 180) / 2);
-            double vR = targetPose.v * (1 + tan(delta * M_PI / 180) / 2);
-            double W = (vR - vL) / WHEEL_BASE;
-
-            return W;
-        }
-        else if (currentMovement == TURN_L)
-        {
-            double xRoot, yRoot, xDesired, yDesired, phiCurrent;
-
-            if (prevTargetPose.theta == 0)
-            {
-                double xRoot = targetPose.x; // center of rotation
-                double yRoot = targetPose.y - TURN_RADIUS;
-                double phiCurrent = atan2(POSE.y - yRoot, POSE.x - xRoot) * 180 / M_PI;
-                double xDesired = xRoot + TURN_RADIUS * cos(phiCurrent * M_PI / 180);
-                double yDesired = yRoot + TURN_RADIUS * sin(phiCurrent * M_PI / 180);
-            }
-            else if (prevTargetPose.theta == 90)
-            {
-                double xRoot = targetPose.x + TURN_RADIUS; // center of rotation
-                double yRoot = targetPose.y;
-                double phiCurrent = atan2(xRoot - POSE.x, POSE.y - yRoot) * 180 / M_PI;
-                double xDesired = xRoot - TURN_RADIUS * sin(phiCurrent * M_PI / 180);
-                double yDesired = yRoot + TURN_RADIUS * cos(phiCurrent * M_PI / 180);
-            }
-            else if (prevTargetPose.theta == 180)
-            {
-                double xRoot = targetPose.x;
-                double yRoot = targetPose.y + TURN_RADIUS;
-                double phiCurrent = atan2(yRoot - POSE.y, xRoot - POSE.x) * 180 / M_PI;
-                double xDesired = xRoot - TURN_RADIUS * cos(phiCurrent * M_PI / 180);
-                double yDesired = yRoot - TURN_RADIUS * sin(phiCurrent * M_PI / 180);
-            }
-            else if (prevTargetPose.theta == 270)
-            {
-                double xRoot = targetPose.x - TURN_RADIUS;
-                double yRoot = targetPose.y;
-                double phiCurrent = atan2(POSE.x - xRoot, yRoot - POSE.y) * 180 / M_PI;
-                double xDesired = xRoot + TURN_RADIUS * sin(phiCurrent * M_PI / 180);
-                double yDesired = yRoot - TURN_RADIUS * cos(phiCurrent * M_PI / 180);
-            }
-
-            double e = sqrt(pow(xRoot - POSE.x, 2) + pow(yRoot - POSE.y, 2)) - TURN_RADIUS;
-            double thetaDesired = 90 - phiCurrent;
-            double psi = POSE.theta - thetaDesired;
-
-            double delta = psi + atan2(K_CT * e, POSE.v + K_S);
-
-            double vL = targetPose.v * (1 - tan(delta * M_PI / 180) / 2);
-            double vR = targetPose.v * (1 + tan(delta * M_PI / 180) / 2);
-            double W = (vR - vL) / WHEEL_BASE;
-
-            return W;
-        }
-        else if (currentMovement == TURN_R)
-        {
-            double xRoot, yRoot, xDesired, yDesired, phiCurrent;
-
-            if (prevTargetPose.theta == 0)
-            {
-                double xRoot = targetPose.x; // center of rotation
-                double yRoot = targetPose.y - TURN_RADIUS;
-                double phiCurrent = atan2(POSE.y - yRoot, -POSE.x + xRoot) * 180 / M_PI;
-                double xDesired = xRoot - TURN_RADIUS * cos(phiCurrent * M_PI / 180);
-                double yDesired = yRoot + TURN_RADIUS * sin(phiCurrent * M_PI / 180);
-            }
-            else if (prevTargetPose.theta == 90)
-            {
-                double xRoot = targetPose.x + TURN_RADIUS; // center of rotation
-                double yRoot = targetPose.y;
-                double phiCurrent = atan2(xRoot - POSE.x, yRoot - POSE.y) * 180 / M_PI;
-                double xDesired = xRoot - TURN_RADIUS * sin(phiCurrent * M_PI / 180);
-                double yDesired = yRoot - TURN_RADIUS * cos(phiCurrent * M_PI / 180);
-            }
-            else if (prevTargetPose.theta == 180)
-            {
-                double xRoot = targetPose.x;
-                double yRoot = targetPose.y + TURN_RADIUS;
-                double phiCurrent = atan2(yRoot - POSE.y, POSE.x - xRoot)*180/M_PI;
-                double xDesired = xRoot + TURN_RADIUS*cos(phiCurrent*M_PI/180);
-                double yDesired = yRoot - TURN_RADIUS*sin(phiCurrent*M_PI/180);
-                
-            } else if (prevTargetPose.theta == 270) {
-                double xRoot = targetPose.x - TURN_RADIUS;
-                double yRoot = targetPose.y;
-                double phiCurrent = atan2(POSE.x - xRoot, POSE.y - yRoot)*180/M_PI;
-                double xDesired = xRoot + TURN_RADIUS*sin(phiCurrent*M_PI/180);
-                double yDesired = yRoot + TURN_RADIUS*cos(phiCurrent*M_PI/180);
-            }
-
-            double e = sqrt(pow(xRoot - POSE.x, 2) + pow(yRoot - POSE.y, 2)) - TURN_RADIUS;
-            double thetaDesired = 90 - phiCurrent;
-            double psi = POSE.theta - thetaDesired;
-
-            double delta = psi + atan2(K_CT * e, POSE.v + K_S);
-
-            double vL = targetPose.v * (1 - tan(delta * M_PI / 180) / 2);
-            double vR = targetPose.v * (1 + tan(delta * M_PI / 180) / 2);
-            double W = (vR - vL) / WHEEL_BASE;
-
-            return W;
-        }   
-        return 0;
-    }
-};
-
-VController VContr(KP_V, KI_V, KD_V);
-WController WContr(KP_W, KI_W, KD_W);
-SteeringController SContr(KP_S, KI_S, KD_S);
-StanleyController StanContr(K_CTSTAN, K_SSTAN, 0.0);
-
-Motor MotorL(Motor_Choice::LEFT);
-Motor MotorR(Motor_Choice::RIGHT);
-
-using string = const char *;
-
-void motorTest(Motor &Motor)
-{
-    if (stdio_usb_connected())
-    {
-        printf("Forward...\n");
-        Motor.setPWM(255);
-        sleep_ms(100);
-        int rpm1 = Motor.readRPM();
-        sleep_ms(50);
-        int rpm2 = Motor.readRPM();
-        sleep_ms(500);
-        Motor.readRPM();
-        sleep_ms(10);
-        int rpm3 = Motor.readRPM();
-        printf("RPM1: %d RPM2: %d RPM3: %d\n", rpm1, rpm2, rpm3);
-        sleep_ms(300);
-        printf("Stopping...\n");
-        Motor.setPWM(0);
-        sleep_ms(1000);
-
-        printf("Backward...\n");
-        Motor.setPWM(-255);
-        sleep_ms(300);
-
-        printf("Stopping...\n");
-        Motor.setPWM(0);
-        sleep_ms(1000);
-    }
-    else {
-        Motor.setPWM(0);
-    }
-}
-
-std::pair<double, double> controlLoop(float vTarget, float wTarget)
-{
-    float rpmCurrentL = MotorL.readRPM();
-    float rpmCurrentR = MotorR.readRPM();
-    float vCurrentL = rpmCurrentL * WHEEL_RADIUS / 60;
-    float vCurrentR = rpmCurrentR * WHEEL_RADIUS / 60;
-    float vCurrentAVG = (vCurrentL + vCurrentR) / 2;
-    float wCurrent = (vCurrentR - vCurrentL) / WHEEL_BASE;
-
-    double vOut = VContr.output(vTarget, vCurrentAVG);
-    double wOut = WContr.output(wTarget, wCurrent);
-    double sOut = StanContr.output();
-    wOut += sOut;
-
-    printf("VOut: %f WOut: %f rpmL: %f rpmR: %f vL: %f vR: %f W: %f\n", vOut, wOut, rpmCurrentL, rpmCurrentR, vCurrentL, vCurrentR, wCurrent);
-
-    double dutyL = std::max(std::min((vOut - wOut), 100.0), -100.0);
-    double dutyR = std::max(std::min((vOut + wOut), 100.0), -100.0);
-
-    return {dutyL, dutyR};
-}
-
-inline Pose getCurrentPose()
-{
-    // Get current pose
-    printf("Current Pose: %f %f %f %f %f\n", POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w);
-    double x = POSE.x;
-    double y = POSE.y;
-    double theta = POSE.theta;
-
-    // Read change in pos of each motor
-    double posL = MotorL.readPOS() / 100;
-    double posR = MotorR.readPOS() / 100;
-    double dPos = (posL + posR) / 2;
-    double dTheta = (posR - posL) / WHEEL_BASE;
-
-    printf("Pos updates: dPos: %f dTheta: %f\n", dPos, dTheta);
-
-    // Update pose
-    x += dPos * cos(POSE.theta);
-    y += dPos * cos(POSE.theta);
-    theta += dTheta;
-    Pose newPose = {x, y, theta, POSE.v, POSE.w};
-
-    printf("New pose: %f %f %f %f %f\n", newPose.x, newPose.y, newPose.theta, newPose.v, newPose.w);
-
-    return newPose;
-}
-
-void setTarget(Command command)
-{
-    prevTargetPose = targetPose;
-    targetReached = false;
-    if (command.action == "FWD")
-    {
-        // Forward for command.value cells
-        currentMovement = FWD;
-        targetPose.v = V_MAX;
-        targetPose.w = 0;
-        if (POSE.theta <= 0.1)
-        {
-            targetPose.y += CELL_WIDTH * command.value;
-        }
-        else if (POSE.theta - 90 <= 0.1)
-        {
-            targetPose.x -= CELL_WIDTH * command.value;
-        }
-        else if (POSE.theta - 180 <= 0.1)
-        {
-            targetPose.y -= CELL_WIDTH * command.value;
-        }
-        else if (POSE.theta - 270 <= 0.1)
-        {
-            targetPose.x += CELL_WIDTH * command.value;
-        }
-    }
-    else if (command.action == "TRN" && command.value == 90)
-    {
-        currentMovement = TURN_L;
-        targetPose.theta += 90;
-        int theta = targetPose.theta;
-        targetPose.theta = theta % 360;
-        targetPose.v = V_MAX;
-        targetPose.w = W_MAX;
-        if (POSE.theta <= 0.1)
-        {
-            targetPose.x -= CELL_WIDTH / 2.0;
-            targetPose.y += CELL_WIDTH / 2.0;
-        }
-        else if (POSE.theta - 90 <= 0.1)
-        {
-            targetPose.x -= CELL_WIDTH / 2.0;
-            targetPose.y -= CELL_WIDTH / 2.0;
-        }
-        else if (POSE.theta - 180 <= 0.1)
-        {
-            targetPose.x += CELL_WIDTH / 2.0;
-            targetPose.y -= CELL_WIDTH / 2.0;
-        }
-        else if (POSE.theta - 270 <= 0.1)
-        {
-            targetPose.x += CELL_WIDTH / 2.0;
-            targetPose.y += CELL_WIDTH / 2.0;
-        }
-    }
-    else if (command.action == "TRN" && command.value == -90)
-    {
-        currentMovement = TURN_R;
-        targetPose.theta -= 90;
-        int theta = targetPose.theta;
-        targetPose.theta = theta % 360;
-        targetPose.v = V_MAX;
-        targetPose.w = -W_MAX;
-
-        if (POSE.theta <= 0.1)
-        {
-            targetPose.x += CELL_WIDTH / 2.0;
-            targetPose.y += CELL_WIDTH / 2.0;
-        }
-        else if (POSE.theta - 90 <= 0.1)
-        {
-            targetPose.x -= CELL_WIDTH / 2.0;
-            targetPose.y += CELL_WIDTH / 2.0;
-        }
-        else if (POSE.theta - 180 <= 0.1)
-        {
-            targetPose.x -= CELL_WIDTH / 2.0;
-            targetPose.y -= CELL_WIDTH / 2.0;
-        }
-        else if (POSE.theta - 270 <= 0.1)
-        {
-            targetPose.x += CELL_WIDTH / 2.0;
-            targetPose.y -= CELL_WIDTH / 2.0;
-        }
-    }
-    else if (command.action == "STOP") {
-        currentMovement = STOP;
-        targetPose.v = 0;
-        targetPose.w = 0;
-        if (POSE.theta <= 0.1)
-        {
-            targetPose.y += CELL_WIDTH;
-        }
-        else if (POSE.theta - 90 <= 0.1)
-        {
-            targetPose.x -= CELL_WIDTH;
-        }
-        else if (POSE.theta - 180 <= 0.1)
-        {
-            targetPose.y -= CELL_WIDTH;
-        }
-        else if (POSE.theta - 270 <= 0.1)
-        {
-            targetPose.x += CELL_WIDTH;
-        }
-    }
-}
-
-bool checkTargetReached()
-{
-    if (POSE - targetPose < Pose{0.1, 0.1, 0.1, 0.1, 0.1})
-    {
-        return true;
-    }
-    return false;
-}
-
-
-constexpr float DEFAULT_MAX_SENSOR_RANGE_MM = 255.0f;
-constexpr float FRONT_MAX_SENSOR_RANGE_MM = 5.0f * 255.0f; // Front sensor has longer range
-
-constexpr float EPSILON = 1e-9f;
 
 struct Vec2f
 {
@@ -565,6 +92,359 @@ struct Vec2f
         return vec * scalar;
     }
 };
+
+struct Particle
+{
+    Vec2f pos;    // mm
+    float rot_rad; // radians, [-PI, PI), 0 along +X, PI/2 along +Y
+    float weight;
+};
+
+float normalize_angle_pi_pi(float angle_rad) {
+    angle_rad = fmodf(angle_rad + PI, 2.0f * PI);
+    if (angle_rad < 0.0f) {
+        angle_rad += 2.0f * PI;
+    }
+    return angle_rad - PI;
+}
+
+Pose POSE(0.0f, 0.0f, 0.0f, 0.0f, 0.0f); 
+Pose targetPose(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+Pose prevTargetPose(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+MovementType currentMovement = IDLE;
+bool targetReached = true;
+
+class VController
+{
+public:
+    float ePrev = 0; 
+    float eTot = 0;
+    float Kp, Ki, Kd; // Kd not used
+    uint64_t tPrev;
+
+    VController(float kp, float ki, float kd) : Kp(kp), Ki(ki), Kd(kd) {
+        tPrev = time_us_64();
+    }
+
+    float output(float vRef_mmps, float vCurrent_mmps) {
+        float e = vRef_mmps - vCurrent_mmps;
+        uint64_t t = time_us_64();
+        float dt = static_cast<float>(t - tPrev) / 1000000.0f;
+
+        if (dt >= EPSILON) {
+            eTot += e * dt;
+        }
+        // Optional: Clamp eTot 
+        // eTot = std::max(-MAX_ETOT_V, std::min(MAX_ETOT_V, eTot));
+
+        float out_val = Kp * e + Ki * eTot; // Kd term: + Kd * (e - ePrev) / dt;
+        
+        tPrev = t;
+        ePrev = e;
+        return out_val;
+    }
+
+    void reset() {
+        eTot = 0;
+        ePrev = 0;
+        tPrev = time_us_64();
+    }
+};
+
+class WController
+{
+public:
+    float ePrev = 0; 
+    float eTot = 0;
+    float Kp, Ki, Kd; // Kd not used
+    uint64_t tPrev;
+
+    WController(float kp, float ki, float kd) : Kp(kp), Ki(ki), Kd(kd) {
+        tPrev = time_us_64();
+    }
+
+    float output(float wRef_radps, float wCurrent_radps) { 
+        float e = wRef_radps - wCurrent_radps; // Error in rad/s
+        uint64_t t = time_us_64();
+        float dt = static_cast<float>(t - tPrev) / 1000000.0f;
+
+        if (dt >= EPSILON) {
+            eTot += e * dt;
+        }
+        // Optional: Clamp eTot
+        // eTot = std::max(-MAX_ETOT_W, std::min(MAX_ETOT_W, eTot));
+
+        float out_val = Kp * e + Ki * eTot;
+        
+        tPrev = t;
+        ePrev = e;
+        return out_val; 
+    }
+
+    void reset() {
+        eTot = 0;
+        ePrev = 0;
+        tPrev = time_us_64();
+    }
+};
+
+class StanleyController
+{
+public:
+    float K_CT; // Cross-track gain
+    float K_S;  // Smoothing gain for effective velocity (v_e = POSE.v_mmps + K_S)
+
+    StanleyController(float k_ct, float k_s) : K_CT(k_ct), K_S(k_s) {}
+
+    // Output is desired angular velocity (rad/s)
+    float output() {
+        // POSE values are in mm, radians, mm/s, rad/s
+        // targetPose values are in mm, radians, mm/s, rad/s
+        
+        float desired_w_radps = 0.0f;
+
+        if (currentMovement == FWD) {
+            // Cross-track error e_ct (mm)
+            // Path is a line defined by (targetPose.x, targetPose.y) and angle targetPose.theta
+            // e_ct = (POSE.x - targetPose.x) * sin(targetPose.theta) - (POSE.y - targetPose.y) * cos(targetPose.theta)
+            // This formula gives signed distance. Positive if POSE is to the "left" of directed line targetPose,
+            // assuming standard math angles (0 along +X).
+            float dx = POSE.x - targetPose.x; // Vector from target point on path to robot
+            float dy = POSE.y - targetPose.y;
+            float path_angle_rad = targetPose.theta; // Robot should follow this orientation
+            
+            // Cross-track error: perpendicular distance to the line.
+            // The line passes through targetPose.x, targetPose.y with angle targetPose.theta.
+            // A point on this line is (targetPose.x, targetPose.y).
+            // A normal vector to the path (pointing left) is (-sin(path_angle_rad), cos(path_angle_rad)).
+            // e_ct is the projection of (dx, dy) onto this normal.
+            float e_ct_mm = dx * (-sinf(path_angle_rad)) + dy * cosf(path_angle_rad);
+            // Simpler way if targetPose is the "destination" and robot moves along path_angle_rad:
+            // If path_angle_rad is 0 (+X axis): e_ct = POSE.y - targetPose.y
+            // If path_angle_rad is PI/2 (+Y axis): e_ct = -(POSE.x - targetPose.x) = targetPose.x - POSE.x
+            // Let's use the general line distance formula for clarity, assuming targetPose.x/y is a point on the desired path.
+            // The line is (targetPose.x, targetPose.y) going in direction targetPose.theta.
+            // Error relative to path line x*sin(th_p) - y*cos(th_p) - (x_p*sin(th_p) - y_p*cos(th_p)) = 0
+             e_ct_mm = (POSE.x - targetPose.x) * sinf(targetPose.theta) - (POSE.y - targetPose.y) * cosf(targetPose.theta);
+
+
+            // Heading error psi (radians)
+            float psi_rad = normalize_angle_pi_pi(POSE.theta - targetPose.theta);
+
+            // Effective velocity for atan2 term
+            float v_effective_mmps = fabsf(POSE.v) + K_S; 
+            if (v_effective_mmps < 10.0f) v_effective_mmps = 10.0f; // Avoid issues at very low speed (e.g. 10mm/s)
+
+            // Steering angle delta (radians)
+            float delta_rad = psi_rad + atan2f(K_CT * e_ct_mm, v_effective_mmps);
+            delta_rad = normalize_angle_pi_pi(delta_rad); // Keep delta reasonable
+
+            // Convert steering angle delta to angular velocity W = v * tan(delta) / L
+            if (fabsf(targetPose.v) < EPSILON) { 
+                 desired_w_radps = K_CT * psi_rad; // If not moving, just correct heading slowly
+            } else {
+                 // Clamp delta_rad to avoid extreme tan values, e.g., +/- PI/3 (60 deg)
+                 delta_rad = std::max(-PI/3.0f, std::min(PI/3.0f, delta_rad));
+                 desired_w_radps = (targetPose.v / WHEEL_BASE_MM) * tanf(delta_rad);
+            }
+            // printf("Stanley FWD: e_ct:%.1fmm psi:%.2frad delta:%.2frad -> W_des:%.2frad/s\n", e_ct_mm, psi_rad, delta_rad, desired_w_radps);
+
+        } else if (currentMovement == TURN_L || currentMovement == TURN_R) {
+            float xRoot_mm = 0, yRoot_mm = 0; // Center of the turn circle (mm)
+            bool root_defined = false;
+
+            // prevTargetPose.theta is orientation (rad, 0=+X) before starting this turn command.
+            // prevTargetPose.x,y is position (mm) where turn initiated.
+            float prev_th_rad = normalize_angle_pi_pi(prevTargetPose.theta);
+
+            // Angle comparisons (e.g., if prev_th_rad is close to 0, PI/2, etc.)
+            // 0 rad: +X, PI/2 rad: +Y, PI rad: -X, -PI/2 rad: -Y
+            if (currentMovement == TURN_L) { // Turning CCW
+                if (fabsf(prev_th_rad - 0.0f) < 0.1f) { // Was going +X, turning Left (towards +Y)
+                    xRoot_mm = prevTargetPose.x; yRoot_mm = prevTargetPose.y + TURN_RADIUS; root_defined = true;
+                } else if (fabsf(prev_th_rad - (PI/2.0f)) < 0.1f) { // Was going +Y, turning Left (towards -X)
+                    xRoot_mm = prevTargetPose.x - TURN_RADIUS; yRoot_mm = prevTargetPose.y; root_defined = true;
+                } else if (fabsf(fabsf(prev_th_rad) - PI) < 0.1f) { // Was going -X (theta ~ PI or -PI)
+                    xRoot_mm = prevTargetPose.x; yRoot_mm = prevTargetPose.y - TURN_RADIUS; root_defined = true;
+                } else if (fabsf(prev_th_rad - (-PI/2.0f)) < 0.1f) { // Was going -Y
+                    xRoot_mm = prevTargetPose.x + TURN_RADIUS; yRoot_mm = prevTargetPose.y; root_defined = true;
+                }
+            } else { // TURN_R (Turning CW)
+                 if (fabsf(prev_th_rad - 0.0f) < 0.1f) { // Was going +X, turning Right (towards -Y)
+                    xRoot_mm = prevTargetPose.x; yRoot_mm = prevTargetPose.y - TURN_RADIUS; root_defined = true;
+                } else if (fabsf(prev_th_rad - (PI/2.0f)) < 0.1f) { // Was going +Y, turning Right (towards +X)
+                    xRoot_mm = prevTargetPose.x + TURN_RADIUS; yRoot_mm = prevTargetPose.y; root_defined = true;
+                } else if (fabsf(fabsf(prev_th_rad) - PI) < 0.1f) { // Was going -X
+                    xRoot_mm = prevTargetPose.x; yRoot_mm = prevTargetPose.y + TURN_RADIUS; root_defined = true;
+                } else if (fabsf(prev_th_rad - (-PI/2.0f)) < 0.1f) { // Was going -Y
+                    xRoot_mm = prevTargetPose.x - TURN_RADIUS; yRoot_mm = prevTargetPose.y; root_defined = true;
+                }
+            }
+            
+            if (!root_defined) {
+                // printf("Stanley TURN: ERROR - Could not determine turn center. PrevTh: %.2frad\n", prev_th_rad);
+                return 0.0f; 
+            }
+
+            // Cross-track error for circular path (mm)
+            float e_ct_mm = sqrtf(powf(POSE.x - xRoot_mm, 2) + powf(POSE.y - yRoot_mm, 2)) - TURN_RADIUS;
+
+            // Desired heading (tangent to circle)
+            float angle_to_pose_rad = atan2f(POSE.y - yRoot_mm, POSE.x - xRoot_mm);
+            float desired_heading_rad;
+            if (currentMovement == TURN_L) {
+                desired_heading_rad = angle_to_pose_rad + PI / 2.0f;
+            } else { // TURN_R
+                desired_heading_rad = angle_to_pose_rad - PI / 2.0f;
+            }
+            desired_heading_rad = normalize_angle_pi_pi(desired_heading_rad);
+            
+            // Heading error psi (rad)
+            float psi_rad = normalize_angle_pi_pi(POSE.theta - desired_heading_rad);
+            // Alternative: psi error w.r.t final target orientation of the turn.
+            // float psi_rad = normalize_angle_pi_pi(POSE.theta - targetPose.theta);
+
+
+            float v_effective_mmps = fabsf(POSE.v) + K_S;
+            if (v_effective_mmps < 10.0f) v_effective_mmps = 10.0f;
+
+            float delta_rad = psi_rad + atan2f(K_CT * e_ct_mm, v_effective_mmps);
+            delta_rad = normalize_angle_pi_pi(delta_rad);
+            delta_rad = std::max(-PI/3.0f, std::min(PI/3.0f, delta_rad)); // Clamp steering
+
+            if (fabsf(targetPose.v) < EPSILON) {
+                 desired_w_radps = 0.0f;
+            } else {
+                 desired_w_radps = (targetPose.v / WHEEL_BASE_MM) * tanf(delta_rad);
+                 // Cap based on nominal turn rate
+                 float cap = W_MAX_NOMINAL * 1.2f; // Allow some overshoot from nominal
+                 if (desired_w_radps > cap) desired_w_radps = cap;
+                 if (desired_w_radps < -cap) desired_w_radps = -cap;
+            }
+            // printf("Stanley TURN: e_ct:%.1fmm psi:%.2frad delta:%.2frad -> W_des:%.2frad/s\n", e_ct_mm, psi_rad, delta_rad, desired_w_radps);
+
+        } else { // STOP_CMD or IDLE
+            desired_w_radps = 0.0f;
+        }
+        return desired_w_radps;
+    }
+};
+
+VController VContr(KP_V, KI_V, 0.0f /*KD_V not used*/);
+WController WContr(KP_W, KI_W, 0.0f /*KD_W not used*/);
+StanleyController StanContr(K_CTSTAN, K_SSTAN);
+
+Motor MotorL(Motor_Choice::LEFT);
+Motor MotorR(Motor_Choice::RIGHT);
+
+using string = const char *;
+
+/*void motorTest(Motor &Motor)
+{
+    if (stdio_usb_connected())
+    {
+        printf("Forward...\n");
+        Motor.setPWM(255);
+        sleep_ms(100);
+        int rpm1 = Motor.readRPM();
+        sleep_ms(50);
+        int rpm2 = Motor.readRPM();
+        sleep_ms(500);
+        Motor.readRPM();
+        sleep_ms(10);
+        int rpm3 = Motor.readRPM();
+        printf("RPM1: %d RPM2: %d RPM3: %d\n", rpm1, rpm2, rpm3);
+        sleep_ms(300);
+        printf("Stopping...\n");
+        Motor.setPWM(0);
+        sleep_ms(1000);
+
+        printf("Backward...\n");
+        Motor.setPWM(-255);
+        sleep_ms(300);
+
+        printf("Stopping...\n");
+        Motor.setPWM(0);
+        sleep_ms(1000);
+    }
+    else {
+        Motor.setPWM(0);
+    }
+}*/
+
+std::pair<float, float> controlLoop(float vTarget, float wTarget)
+{
+    float rpmCurrentL = MotorL.RPM;
+    float rpmCurrentR = MotorR.RPM;
+    float vCurrentL = rpmCurrentL * WHEEL_RADIUS / 60;
+    float vCurrentR = rpmCurrentR * WHEEL_RADIUS / 60;
+    float vCurrentAVG = (vCurrentL + vCurrentR) / 2;
+    float wCurrent = (vCurrentR - vCurrentL) / WHEEL_BASE;
+
+    float vOut = VContr.output(vTarget, vCurrentAVG);
+    float wOut = WContr.output(wTarget, wCurrent);
+    float sOut = StanContr.output();
+    wOut += sOut;
+
+    printf("VOut: %f WOut: %f rpmL: %f rpmR: %f vL: %f vR: %f W: %f\n", vOut, wOut, rpmCurrentL, rpmCurrentR, vCurrentL, vCurrentR, wCurrent);
+
+    float dutyL = std::max(std::min((vOut - wOut), 100.0f), -100.0f);
+    float dutyR = std::max(std::min((vOut + wOut), 100.0f), -100.0f);
+
+    return {dutyL, dutyR};
+}
+
+void setTarget(Command command) {
+    prevTargetPose = targetPose; // The target we just arrived at (or current POSE if first command)
+
+    targetReached = false; 
+
+    if (command.action == "FWD") {
+        currentMovement = FWD;
+        targetPose.v = V_MAX; // Target speed in mm/s
+        targetPose.w = 0.0f;  // Nominal angular velocity for FWD is 0
+
+        // Current orientation of the robot (rad)
+        float current_pose_theta_rad = POSE.theta; 
+        targetPose.theta = current_pose_theta_rad; // Maintain current orientation for FWD path
+
+        float distance_mm = CELL_WIDTH * command.value; // command.value is number of cells
+
+        // Update target X, Y based on current POSE.theta (radians, 0 along +X)
+        targetPose.x = POSE.x + distance_mm * cosf(current_pose_theta_rad);
+        targetPose.y = POSE.y + distance_mm * sinf(current_pose_theta_rad);
+
+    } else if (command.action == "TRN") {
+        targetPose.v = V_MAX * 0.5f; // Slower speed for turns (mm/s)
+        
+        float turn_angle_rad = command.value; // radians, positive for left (CCW)
+        if (turn_angle_rad > 0) currentMovement = TURN_L;
+        else currentMovement = TURN_R;
+
+        targetPose.theta = normalize_angle_pi_pi(POSE.theta + turn_angle_rad); // New target orientation
+        
+        // Nominal angular speed for turn (rad/s)
+        float nominal_turn_w = (turn_angle_rad > 0 ? W_MAX_NOMINAL : -W_MAX_NOMINAL) * 0.75f; // Use 75% of max nominal for stability
+        targetPose.w = nominal_turn_w; 
+
+        // For turns, target X,Y is generally the current location if it's an in-place turn.
+        // Stanley controller's turn logic uses prevTargetPose to define the arc.
+        targetPose.x = POSE.x;
+        targetPose.y = POSE.y;
+        
+    } else if (command.action == "STOP") {
+        currentMovement = STOP_CMD;
+        targetPose.v = 0.0f;
+        targetPose.w = 0.0f;
+        targetPose.x = POSE.x; 
+        targetPose.y = POSE.y;
+        targetPose.theta = POSE.theta; 
+        targetReached = true; 
+    }
+}
+
+constexpr float DEFAULT_MAX_SENSOR_RANGE_MM = 255.0f;
+constexpr float FRONT_MAX_SENSOR_RANGE_MM = 5.0f * 255.0f; // Front sensor has longer range
 
 #define CELL_SIZE_MM 180.0f
 
@@ -737,10 +617,10 @@ Vec2f rotate_vector_cpp(const Vec2f &v, float angle_rad)
 
 const float SENSOR_ORIENTATIONS_RAD[NUM_TOF_SENSORS] = {
     0.0f,
-    (float)M_PI / 2.0f,
-    -(float)M_PI / 2.0f,
-    (float)M_PI / 4.0f,
-    -(float)M_PI / 4.0f};
+    (float)PI / 2.0f,
+    -(float)PI / 2.0f,
+    (float)PI / 4.0f,
+    -(float)PI / 4.0f};
 
 Vec2f get_tof_location_cpp(const Vec2f &robot_pos_world, float robot_rot_rad, int sensor_index)
 {
@@ -964,28 +844,26 @@ void parse_maze_string(const char *maze_str_input)
 
 #define NUM_PARTICLES 500
 
-struct Particle
-{
-    Vec2f pos;
-    float rot_rad;
-    float weight;
-};
-
-const float SENSOR_NOISE_STDDEV = 90.0f; // mm, tune this!
-const float SENSOR_NOISE_VAR = SENSOR_NOISE_STDDEV * SENSOR_NOISE_STDDEV;
-
 Particle particles_a[NUM_PARTICLES] = {};
 Particle particles_b[NUM_PARTICLES] = {};
 
 Particle *particles = particles_a;     // Pointer to current particle set
 Particle *new_particles = particles_b; // Pointer to new particle set
 
-float rand_gauss(float mean, float stddev)
-{
+float rand_gauss(float mean, float stddev) { 
+    static bool has_spare = false;
+    static float spare_gaussian;
+    if (has_spare) {
+        has_spare = false;
+        return mean + stddev * spare_gaussian;
+    }
+    has_spare = true;
     float u1 = (float)rand() / RAND_MAX;
     float u2 = (float)rand() / RAND_MAX;
-    float z0 = sqrtf(-2.0f * logf(u1)) * cosf(2.0f * M_PI * u2);
-    return z0 * stddev + mean;
+    if (u1 < 1e-6f) u1 = 1e-6f; 
+    float z0 = sqrtf(-2.0f * logf(u1)) * cosf(2.0f * PI * u2);
+    spare_gaussian = sqrtf(-2.0f * logf(u1)) * sinf(2.0f * PI * u2);
+    return mean + stddev * z0;
 }
 
 void localize_particles()
@@ -1054,8 +932,8 @@ void localize_particles()
         }
         new_particles[m] = particles[i];
 
-        new_particles[m].pos.x += rand_gauss(0.0f, 3.0f); // mm
-        new_particles[m].pos.y += rand_gauss(0.0f, 3.0f); // mm
+        new_particles[m].pos.x += rand_gauss(0.0f, 3.0f);    // mm
+        new_particles[m].pos.y += rand_gauss(0.0f, 3.0f);    // mm
         new_particles[m].rot_rad += rand_gauss(0.0f, 0.05f); // radians
     }
 
@@ -1065,7 +943,7 @@ void localize_particles()
 float random_angle()
 {
     // Generate a random angle in radians between 0 and 2*PI
-    return static_cast<float>(rand()) / RAND_MAX * 2.0f * (float)M_PI;
+    return static_cast<float>(rand()) / RAND_MAX * 2.0f * (float)PI;
 }
 
 Vec2f random_free_cell_center()
@@ -1090,8 +968,8 @@ void motion_update(float dx, float dy, float drot)
 {
     for (int i = 0; i < NUM_PARTICLES; ++i)
     {
-        float noise_x = rand_gauss(0.0f, 5.0f); // mm
-        float noise_y = rand_gauss(0.0f, 5.0f); // mm
+        float noise_x = rand_gauss(0.0f, 5.0f);    // mm
+        float noise_y = rand_gauss(0.0f, 5.0f);    // mm
         float noise_rot = rand_gauss(0.0f, 0.05f); // radians
 
         particles[i].pos.x += dx + noise_x;
@@ -1102,6 +980,99 @@ void motion_update(float dx, float dy, float drot)
 
 #define ROBOT_WHEEL_BASE_MM 80.0f
 
+void estimate_pose_from_particles()
+{
+    if (NUM_PARTICLES == 0)
+        return;
+
+    Vec2f avg_pos_mm = {0.0f, 0.0f};
+    float avg_sin_rot = 0.0f;
+    float avg_cos_rot = 0.0f;
+    float total_weight = 0.0f;
+
+    for (int i = 0; i < NUM_PARTICLES; ++i)
+    {
+        total_weight += particles[i].weight; // Should be 1.0 if normalized after resampling
+        avg_pos_mm.x += particles[i].pos.x * particles[i].weight;
+        avg_pos_mm.y += particles[i].pos.y * particles[i].weight;
+        avg_sin_rot += sinf(particles[i].rot_rad) * particles[i].weight;
+        avg_cos_rot += cosf(particles[i].rot_rad) * particles[i].weight;
+    }
+
+    // If weights were not re-normalized to sum to 1 after resampling:
+    // if (total_weight > EPSILON) {
+    //    avg_pos_mm.x /= total_weight;
+    //    avg_pos_mm.y /= total_weight;
+    //    avg_sin_rot /= total_weight;
+    //    avg_cos_rot /= total_weight;
+    // }
+
+    // Convert from particle frame (mm, rad from +X CCW) to POSE frame (m, deg [0,360) 0=+Y, 90=-X)
+    float est_x_mm = avg_pos_mm.x;
+    float est_y_mm = avg_pos_mm.y;
+
+    float est_rot_rad_atan2 = atan2f(avg_sin_rot, avg_cos_rot);  // Angle from +X, CCW
+    float est_rot_deg_atan2 = est_rot_rad_atan2 * 180.0f / PI; // [-180, 180]
+
+    POSE.x = est_x_mm;
+    POSE.y = est_y_mm;
+    POSE.theta = normalize_angle_pi_pi(est_rot_deg_atan2);
+}
+
+bool checkTargetReached() {
+    if (currentMovement == IDLE || currentMovement == STOP_CMD) return true;
+
+    float dx_mm = POSE.x - targetPose.x;
+    float dy_mm = POSE.y - targetPose.y;
+    float dist_sq_mm = dx_mm * dx_mm + dy_mm * dy_mm;
+
+    float angle_diff_rad = normalize_angle_pi_pi(POSE.theta - targetPose.theta);
+    angle_diff_rad = fabsf(angle_diff_rad); // Absolute difference
+
+    float dist_thresh_mm, angle_thresh_rad;
+
+    if (currentMovement == FWD) {
+        dist_thresh_mm = 20.0f; // 20 mm
+        // For FWD, primarily check distance. Angle is less critical once on path.
+        return dist_sq_mm < (dist_thresh_mm * dist_thresh_mm);
+    } else if (currentMovement == TURN_L || currentMovement == TURN_R) {
+        angle_thresh_rad = 5 * (PI / 180);  // 5 degrees
+        // For turns, primary check is orientation.
+        return angle_diff_rad < angle_thresh_rad;
+    }
+    return false;
+}
+
+#define TOF_FRONT_IDX ((int)TOF_Direction::FRONT)
+#define TOF_LEFT_DIAG_IDX ((int)TOF_Direction::FRONT_LEFT_45)
+#define TOF_RIGHT_DIAG_IDX ((int)TOF_Direction::FRONT_RIGHT_45)
+#define TOF_SIDE_LEFT_IDX ((int)TOF_Direction::LEFT)
+#define TOF_SIDE_RIGHT_IDX ((int)TOF_Direction::RIGHT)
+
+#define WALL_DIST_THRESHOLD_MM 100.0f 
+#define SIDE_WALL_CLEAR_MM 150.0f 
+
+Command decide_next_action_tof_based() {
+    bool wall_F = MM_VALID[TOF_FRONT_IDX] && MM[TOF_FRONT_IDX] < WALL_DIST_THRESHOLD_MM;
+    
+    bool passage_L = MM_VALID[TOF_SIDE_LEFT_IDX] && MM[TOF_SIDE_LEFT_IDX] > SIDE_WALL_CLEAR_MM;
+    bool passage_R = MM_VALID[TOF_SIDE_RIGHT_IDX] && MM[TOF_SIDE_RIGHT_IDX] > SIDE_WALL_CLEAR_MM;
+
+    // Fallback using diagonal if side sensors are not good
+    if (!MM_VALID[TOF_SIDE_LEFT_IDX]) passage_L = MM_VALID[TOF_LEFT_DIAG_IDX] && MM[TOF_LEFT_DIAG_IDX] > WALL_DIST_THRESHOLD_MM * 1.2f;
+    if (!MM_VALID[TOF_SIDE_RIGHT_IDX]) passage_R = MM_VALID[TOF_RIGHT_DIAG_IDX] && MM[TOF_RIGHT_DIAG_IDX] > WALL_DIST_THRESHOLD_MM * 1.2f;
+
+    if (!wall_F) {
+        return {"FWD", 1.0f}; // Move 1 cell forward
+    } else if (passage_R) { 
+        return {"TRN", -PI/2.0f}; // Turn Right (approx -90 deg)
+    } else if (passage_L) { 
+        return {"TRN", PI/2.0f};  // Turn Left (approx +90 deg)
+    } else { 
+        return {"TRN", PI/2.0f};  // Default to left turn if stuck
+    }
+}
+
 int main()
 {
     srand(time(NULL)); // Seed the random number generator
@@ -1111,107 +1082,87 @@ int main()
 
     global_init();
 
-    Vec2f robot_pos(CELL_SIZE_MM * 0.5f, CELL_SIZE_MM * 0.5f);
-    float robot_rot_rad = (float)M_PI / 2.0f;
+    POSE.x = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
+    POSE.y = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
+    POSE.theta = PI / 2.0f; // Facing "up" in the maze (0 degrees is +Y)
+    printf("Initial pose: x=%.2fm, y=%.2fm, th=%.1fdeg\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI);
 
     for (int i = 0; i < NUM_PARTICLES; ++i)
     {
-        particles[i].pos = sample_around_start_point(); // your own method
-        particles[i].rot_rad = random_angle();        // e.g., float between 0 and 2*PI
+        particles[i].pos = sample_around_start_point();
+        particles[i].rot_rad = random_angle();
         particles[i].weight = 1.0f / NUM_PARTICLES;
     }
 
-#if 0
-    printf("Robot position: (%.2f, %.2f) mm\n", robot_pos.x, robot_pos.y);
-    printf("Robot rotation: %.2f degrees\n", (robot_rot_rad * 180.0f / (float)M_PI));
+    uint64_t loop_time_prev_us = time_us_64();
+    int loop_count = 0;
 
-    Vec2f sensor_points_data[NUM_TOF_SENSORS];
-    bool sensor_valid_readings[NUM_TOF_SENSORS];
-
-    update_tof_sensor_data_ray_marching_cpp(
-        sensor_points_data, sensor_valid_readings,
-        robot_pos, robot_rot_rad);
-
-    printf("\nSimulated Noisy Sensor Intersection Points (mm) & Validity:\n");
-    const char *sensor_names[NUM_TOF_SENSORS] = {"FRONT        ", "LEFT         ", "RIGHT        ", "FRONT_LEFT_45", "FRONT_RIGHT_45"};
-    for (int i = 0; i < NUM_TOF_SENSORS; ++i)
-    {
-        printf("%s: ", sensor_names[i]);
-        if (isnan(sensor_points_data[i].x))
-        {
-            printf("(NaN, NaN)");
-        }
-        else
-        {
-            // Distance from actual TOF origin to hit point
-            Vec2f tof_origin = get_tof_location_cpp(robot_pos, robot_rot_rad, i);
-            float dist_from_tof_origin = (sensor_points_data[i] - tof_origin).norm();
-            if (sensor_valid_readings[i])
-            {
-                printf("(%.2f, %.2f)  Dist: %.2f mm \n",
-                       sensor_points_data[i].x, sensor_points_data[i].y, dist_from_tof_origin);
-            }
-            else
-            {
-                printf("(Invalid) \n");
-            }
-        }
-    }
-
-    global_read_tofs();
-
-    printf("\nActual TOF Sensor Readings (mm):\n");
-    for (int i = 0; i < NUM_TOF_SENSORS; ++i)
-    {
-        printf("%s: ", sensor_names[i]);
-        if (MM_VALID[i])
-        {
-            printf("Approx Dist: %d mm\n", MM[i]);
-        }
-        else
-        {
-            printf("(Invalid)\n");
-        }
-    }
-
-    Vec2f ray_origin = Vec2f(CELL_SIZE_MM * 0.5f, CELL_SIZE_MM * 0.5f);
-    Vec2f ray_dir = Vec2f(1.0f, 0.0f);
-    printf("\nDirect ray march from (%.1f,%.1f) pointing right:\n", ray_origin.x, ray_origin.y);
-    RayMarchResult hit_result = fast_ray_march_cpp(ray_origin, ray_dir, DEFAULT_MAX_SENSOR_RANGE_MM * 2);
-    if (isnan(hit_result.point.x))
-    {
-        printf("Hit: (NaN, NaN)");
-    }
-    else
-    {
-        printf("Hit: (%.2f, %.2f)", hit_result.point.x, hit_result.point.y);
-    }
-    printf("  Hit Something: %s\n", hit_result.hit_something ? "true" : "false");
-#endif
-
-    uint64_t tPrev = time_us_64();
     while (true)
-    {        
+    {
+        loop_count++;
+        uint64_t loop_time_now_us = time_us_64();
+        float dt = static_cast<float>(loop_time_now_us - loop_time_prev_us) / 1000000.0f;
+        if (dt <= 0)
+            dt = 0.02f; // Nominal dt if timer issue / first loop
+        loop_time_prev_us = loop_time_now_us;
+
         global_read_tofs();
         global_read_imu();
-     
-        uint64_t tNow = time_us_64();
-        float dt = (tNow - tPrev) / 1e6f; // Convert microseconds to seconds
-        tPrev = tNow;
 
-        float dx_left = MotorL.readPOS();
-        float dx_right = MotorR.readPOS();
+        MotorL.update();
+        MotorR.update();
 
-        float cos_heading = cosf(robot_rot_rad);
-        float sin_heading = sinf(robot_rot_rad);
-        float dx_world = (dx_left * cos_heading + dx_right * cos_heading) / 2.0f; // Average of left and right wheel displacements
-        float dy_world = (dx_left * sin_heading + dx_right * sin_heading) / 2.0f;
+        // Determine robot movement direction based on motor directions
+        bool left_forward = (MotorL.DIR == FORWARD);
+        bool right_forward = (MotorR.DIR == FORWARD);
 
-        printf("dx_left: %.2f mm, dx_right: %.2f mm\n", dx_left, dx_right);
+        if (left_forward && right_forward)
+        {
+            // printf("Robot is moving forward\n");
+        }
+        else if (!left_forward && !right_forward)
+        {
+            // printf("Robot is moving backward\n");
+        }
+        else
+        {
+            // printf("Robot is turning\n");
+        }
 
-        float rps = GYRO_Z * (float)M_PI / 180.0f; // Convert degrees per second to radians per second
-        float drot_rad = rps * dt; // Change in rotation in radians
-        motion_update(dx_world, dy_world, drot_rad);
+        float dx_left_mm = MotorL.DELTA_POS;  // Delta mm for left wheel, always positive
+        float dx_right_mm = MotorR.DELTA_POS; // Delta mm for right wheel, always positive
+
+        float delta_s_body_mm;
+        if (left_forward && right_forward)
+        {
+            delta_s_body_mm = (dx_left_mm + dx_right_mm) / 2.0f; // Forward displacement of robot center
+        }
+        else if (!left_forward && !right_forward)
+        {
+            // Both wheels moving backward
+            delta_s_body_mm = -(dx_left_mm + dx_right_mm) / 2.0f;
+        }
+        else
+        {
+            // One wheel moving forward, the other backward
+            delta_s_body_mm = (dx_right_mm - dx_left_mm) / 2.0f;
+        }
+        float delta_theta_rad = (dx_right_mm - dx_left_mm) / ROBOT_WHEEL_BASE_MM;
+
+        float rps = GYRO_Z * (float)PI / 180.0f; // Convert degrees per second to radians per second
+        POSE.w = rps; // Update POSE.w with gyro reading
+
+        float drot_rad_imu = rps * dt;             // Change in rotation in radians
+
+        // printf("Delta theta from motors: %.2f rad, Delta theta from IMU: %.2f rad\n", delta_theta_rad, drot_rad_imu);
+
+        float odom_dx_world_mm = delta_s_body_mm * cosf(POSE.theta);
+        float odom_dy_world_mm = delta_s_body_mm * sinf(POSE.theta);
+
+        // printf("dx: %.2f mm, dy: %.2f mm\n", odom_dx_world_mm, odom_dy_world_mm);
+
+        motion_update(odom_dx_world_mm, odom_dy_world_mm, drot_rad_imu);
+        estimate_pose_from_particles();
 
         printf(">>> vizPARTICLES ");
         for (int i = 0; i < NUM_PARTICLES; ++i)
@@ -1221,36 +1172,96 @@ int main()
         printf("\n");
         fflush(stdout);
 
-        localize_particles();
+        if (targetReached)
+        {
+            printf("Target reached or initial state. Planning next action.\n");
+            printf("Current POSE before planning: x=%.2f, y=%.2f, th=%.1f\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI);
 
-        sleep_ms(100);
+            VContr.reset(); // Reset PID integrators for new maneuver
+            WContr.reset();
+
+            Command next_cmd = decide_next_action_tof_based();
+            printf("Next command: %s, value: %.1f\n", next_cmd.action.c_str(), next_cmd.value);
+
+            setTarget(next_cmd); // Updates global TARGET_POSE, prevTARGET_POSE, CURRENT_MOVEMENT, targetReached=false
+
+            // printf("New target set: x=%.2fm, y=%.2fm, th=%.1fdeg. Movement: %d. Target V:%.2f W:%.2f\n",
+            //        TARGET_POSE.x, TARGET_POSE.y, TARGET_POSE.theta, static_cast<int>(CURRENT_MOVEMENT), TARGET_POSE.v, TARGET_POSE.w);
+        }
+
+        float rpm_L = MotorL.RPM;
+        float rpm_R = MotorR.RPM;
+        float v_wheel_L_mmps = rpm_L * (1.0f/60.0f) * (2.0f * PI * WHEEL_RADIUS_MM);
+        float v_wheel_R_mmps = rpm_R * (1.0f/60.0f) * (2.0f * PI * WHEEL_RADIUS_MM);
+
+        POSE.v = (v_wheel_L_mmps + v_wheel_R_mmps) / 2.0f;           // m/s
+        //POSE.w = (rpm_R - rpm_L) / (WHEEL_BASE_M) * (2.0f * PI * WHEEL_RADIUS_M) / 60.0f; // rad/s (R>L means CCW for math angle, check convention)
+        //                                                                                    // If using "setTarget" theta, R>L is a left turn (positive W)
+
+        // Get desired angular velocity from Stanley controller
+        float w_ref_stanley_radps = StanContr.output(); 
+
+        float v_effort = VContr.output(targetPose.v, POSE.v); // targetPose.v in mm/s
+        float w_effort = WContr.output(w_ref_stanley_radps, POSE.w); // targetPose.w (from Stanley) in rad/s
+
+        float duty_L_percent = v_effort - w_effort;
+        float duty_R_percent = v_effort + w_effort;
+
+        duty_L_percent = std::max(-100.0f, std::min(100.0f, duty_L_percent));
+        duty_R_percent = std::max(-100.0f, std::min(100.0f, duty_R_percent));
+
+        MotorL.setPWM(duty_L_percent);
+        MotorR.setPWM(duty_R_percent);
+
+        // 6. UPDATE STATE (Check if target is reached)
+       if (!targetReached) {
+            targetReached = checkTargetReached();
+            if (targetReached) {
+                 // currentMovement = IDLE; // Optional: transition to IDLE
+            }
+        }
+
+        // --- Logging ---
+        if (loop_count % 5 == 0) { 
+             printf("T:%.2fs|POSE(mm,rad,v,w):%.0f,%.0f,%.2f|%.0f,%.2f|TGT:%.0f,%.0f,%.2f|%.0f,%.2f|R:%d|Mv:%d|StW:%.2f|Duty:%.0f,%.0f\n",
+               loop_time_now_us/1e6f, POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w,
+               targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w,
+               targetReached, static_cast<int>(currentMovement), w_ref_stanley_radps, duty_L_percent, duty_R_percent);
+             fflush(stdout);
+        }
+        sleep_ms(50);
     }
 
     return 0;
 
-    double vtarg = 5.0;
-    double wtarg = 0.0;
+}
+
+/*
+
+    float vtarg = 5.0;
+    float wtarg = 0.0;
     VContr.reset();
-    double vout1 = VContr.output(vtarg, 0.0);
-    double vout2 = VContr.output(vtarg, 2.0);
-    double vout3 = VContr.output(vtarg, 3.0);
-    setTarget(Command {"FWD", 3});
-    printf("Current Pose: %f %f %f %f %f\nTarget Pose: %f %f %f %f %f\nPrevious Target Pose: %f %f %f %f %f\n", POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w, targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w, prevTargetPose.x, prevTargetPose.y, prevTargetPose.theta, prevTargetPose.v, prevTargetPose.w);
+    float vout1 = VContr.output(vtarg, 0.0);
+    float vout2 = VContr.output(vtarg, 2.0);
+    float vout3 = VContr.output(vtarg, 3.0);
+    setTarget(Command{"FWD", 3});
+    printf("Current Pose: %f %f %f %f %f\nTarget Pose: %f %f %f %f %f\nPrevious Target Pose: %f %f %f %f %f\n", POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w, TARGET_POSE.x, TARGET_POSE.y, TARGET_POSE.theta, TARGET_POSE.v, TARGET_POSE.w, prevTARGET_POSE.x, prevTARGET_POSE.y, prevTARGET_POSE.theta, prevTARGET_POSE.v, prevTARGET_POSE.w);
 
     // POSE = {-0.02, 0.02, 15, 0.95*V_MAX, W_MAX};
     // double w = StanContr.output();
 
     // printf("W: %f", w);
 
-    while (true) {
+    while (true)
+    {
         auto [dutyL, dutyR] = controlLoop(5, 0);
 
-        MotorL.setPWM((float) dutyL);
-        MotorR.setPWM((float) dutyR);
+        MotorL.setPWM((float)dutyL);
+        MotorR.setPWM((float)dutyR);
 
         printf("%f %f\n", dutyL, dutyR);
     }
-    
+
     // double vtarg = 5.0;
     // double wtarg = 0.0;
     // VContr.reset();
@@ -1290,15 +1301,43 @@ int main()
             for (Command command : commands)
             {
                 printf("%s %f ", command.action, command.value);
-            }*/
+            }
         }
         else
         {
             sleep_ms(100);
         }
 
+
+inline Pose getCurrentPose()
+{
+    // Get current pose
+    printf("Current Pose: %f %f %f %f %f\n", POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w);
+    double x = POSE.x;
+    double y = POSE.y;
+    double theta = POSE.theta;
+
+    // Read change in pos of each motor
+    double posL = MotorL.DELTA_POS / 100;
+    double posR = MotorR.DELTA_POS / 100;
+    double dPos = (posL + posR) / 2;
+    double dTheta = (posR - posL) / WHEEL_BASE;
+
+    printf("Pos updates: dPos: %f dTheta: %f\n", dPos, dTheta);
+
+    // Update pose
+    x += dPos * cos(POSE.theta);
+    y += dPos * cos(POSE.theta);
+    theta += dTheta;
+    Pose newPose = {x, y, theta, POSE.v, POSE.w};
+
+    printf("New pose: %f %f %f %f %f\n", newPose.x, newPose.y, newPose.theta, newPose.v, newPose.w);
+
+    return newPose;
+}
+
         // POSE = getCurrentPose();
-        // auto [dutyL, dutyR] = controlLoop(targetPose.v, targetPose.w);
+        // auto [dutyL, dutyR] = controlLoop(TARGET_POSE.v, TARGET_POSE.w);
         // MotorL.setPWM(dutyL);
         // MotorR.setPWM(dutyR);
 
@@ -1329,8 +1368,7 @@ int main()
         // // }
         // }
     }
-}
-
+*/
 // printf("VOut1: %f VOut2: %f VOut3: %f\nWOut1: %f WOut2: %f WOut3: %f", vout1, vout2, vout3, wout1, wout2, wout3);
 
 // while (true) {
@@ -1508,7 +1546,7 @@ while (true)
            "Accel: [%.2f, %.2f, %.2f] m/s^2 | "
            "Gyro: [%.2f, %.2f, %.2f] rad/s | "
            "dt: %.3f s\n",
-           roll * (180.0 / M_PI), pitch * (180.0 / M_PI), yaw * (180.0 / M_PI),
+           roll * (180.0 / PI), pitch * (180.0 / PI), yaw * (180.0 / PI),
            accel_raw[0], accel_raw[1], accel_raw[2],
            gyro_raw[0], gyro_raw[1], gyro_raw[2],
            dt);

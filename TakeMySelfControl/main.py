@@ -265,7 +265,6 @@ class TakeMySelfControl(QMainWindow):
 
             def write(text):
                 if self.process:
-                    print("TO WRITE", text)
                     self.process.stdin.write(text)
                     self.process.stdin.flush()
 
@@ -274,7 +273,7 @@ class TakeMySelfControl(QMainWindow):
 
                 # --- Special handling for ">>>" commands ---
                 if line.startswith(">>>"):
-                    print("Handling command:", line.strip())
+                    # print("Handling command:", line.strip())
                     parts = line.split()
                     if len(parts) < 2:
                         output_buffer.append(f">>> Error parsing command: {line.strip()}\n") 

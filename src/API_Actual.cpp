@@ -75,37 +75,33 @@ Motor::Motor(Motor_Choice choice)
     irq_set_enabled(IO_IRQ_BANK0, true);
 }
 
-void Motor::setPWM(float PWM)
+void Motor::setPWM(float pwm)
 {
     printf("Setting PWM...\n");
 
-    int dir = FORWARD;
-    if (PWM < 0.0)
+    pwm = fmaxf(fminf(pwm, 100.0f), -100.0f); // Cap PWM to [-100, 100]
+    this->PWM = pwm;
+    
+    int sign = 1;
+    if (pwm < 0.0)
     {
-        dir = BACKWARD;
-        PWM = -PWM; // Make PWM positive
+        DIR = BACKWARD;
+        sign = -1; // To flip to positive later
     }
     else
     {
-        dir = FORWARD;
-    }
-
-    if (PWM > 100.0)
-    {
-        PWM = 100.0;
-        printf("Invalid PWM value. Capped to 100 magnitude max.\n");
+        DIR = FORWARD;
     }
 
     // Scale PWM from 0 to 100 to 45 to 255
-    int actualPWM = (PWM * 210) / 100 + 45;
+    int actualPWM = sign * (pwm * 210) / 100 + 45;
 
-    this->dir = dir;
-    if (dir == FORWARD)
+    if (DIR == FORWARD)
     {
         gpio_put(pinForward, 1);
         gpio_put(pinBackward, 0);
     }
-    else if (dir == BACKWARD)
+    else if (DIR == BACKWARD)
     {
         gpio_put(pinForward, 0);
         gpio_put(pinBackward, 1);
@@ -118,7 +114,7 @@ void Motor::setPWM(float PWM)
     analogWrite(pinPWM, actualPWM);
 }
 
-float Motor::readRPM()
+void Motor::update()
 {
     uint64_t now = time_us_64();
 
@@ -136,20 +132,18 @@ float Motor::readRPM()
         // float rps = (pulses / TICKS_PER_REV) * (1000000.0f / dt_us) / GEAR_RATIO;
         float rpm = (pulses / TICKS_PER_REV) * (60000000.0f / dt_us) / GEAR_RATIO; // Convert to RPM
         printf("RPM reading is: %f\n", rpm);
-        return rpm;
+        
+        this->RPM = rpm;
+    } else {
+        printf("dt_us is zero or negative, skipping RPM update.\n");
+        this->RPM = 0.0f; // Avoid division by zero
     }
 
-    return 0.0;
-}
-
-float Motor::readPOS()
-{
     double pulses = double(*totalTicks - prevTicksPOS);
     prevTicksPOS = *totalTicks;
 
     double deltaPos = pulses / TICKS_PER_REV * 2 * M_PI * WHEEL_RADIUS;
-
-    return deltaPos;
+    this->DELTA_POS = deltaPos;
 }
 
 uint pwm_setup(uint gpio)
