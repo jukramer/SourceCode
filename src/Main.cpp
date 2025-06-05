@@ -9,25 +9,25 @@
 #define PI 3.14159265358979323846f // Define PI constant
 
 // Controller Constants
-#define KP_V 2.0f   // Velocity controller (tuned for mm/s)
-#define KI_V 0.4f  // (tuned for mm/s)
+#define KP_V 2.0f // Velocity controller (tuned for mm/s)
+#define KI_V 0.4f // (tuned for mm/s)
 // KD_V not used in VController currently
-#define KP_W 50.0f  // Angular velocity controller (rad/s)
+#define KP_W 50.0f // Angular velocity controller (rad/s)
 #define KI_W 5.0f  // (rad/s)
 // KD_W not used in WController currently
-#define K_CTSTAN 1.0f  // Stanley controller cross-track gain
-#define K_SSTAN 5.0f   // Stanley controller smoothing gain (mm/s)
+#define K_CTSTAN 1.0f // Stanley controller cross-track gain
+#define K_SSTAN 5.0f  // Stanley controller smoothing gain (mm/s)
 
 // Maze and Robot Dimensions (all in millimeters or radians)
-#define CELL_WIDTH 180.0f       // mm
-#define V_MAX 250.0f            // mm/s (Reduced V_MAX for more stable testing initially)
-#define TURN_RADIUS (CELL_WIDTH / 2.0f) // mm
+#define CELL_WIDTH 180.0f                   // mm
+#define V_MAX 250.0f                        // mm/s (Reduced V_MAX for more stable testing initially)
+#define TURN_RADIUS (CELL_WIDTH / 2.0f)     // mm
 #define W_MAX_NOMINAL (V_MAX / TURN_RADIUS) // Nominal angular velocity for turns (rad/s)
 
-#define WHEEL_RADIUS_MM 16.0f   // mm
-#define WHEEL_BASE_MM 80.0f     // mm
+#define WHEEL_RADIUS_MM 22.0f // mm
+#define WHEEL_BASE_MM 80.0f   // mm
 
-#define SENSOR_NOISE_STDDEV 1.0f // mm
+#define SENSOR_NOISE_STDDEV 0.1f
 const float SENSOR_NOISE_VAR = SENSOR_NOISE_STDDEV * SENSOR_NOISE_STDDEV;
 
 #define EPSILON 1e-6f
@@ -40,7 +40,7 @@ struct Pose
     float v;     // linear velocity, mm/s
     float w;     // angular velocity, rad/s (CCW positive)
 
-    Pose(float _x=0.f, float _y=0.f, float _theta=0.f, float _v=0.f, float _w=0.f)
+    Pose(float _x = 0.f, float _y = 0.f, float _theta = 0.f, float _v = 0.f, float _w = 0.f)
         : x(_x), y(_y), theta(_theta), v(_v), w(_w) {}
 };
 
@@ -88,20 +88,22 @@ struct Vec2f
 
 struct Particle
 {
-    Vec2f pos;    // mm
+    Vec2f pos;     // mm
     float rot_rad; // radians, [-PI, PI), 0 along +X, PI/2 along +Y
     float weight;
 };
 
-float normalize_angle_pi_pi(float angle_rad) {
+float normalize_angle_pi_pi(float angle_rad)
+{
     angle_rad = fmodf(angle_rad + PI, 2.0f * PI);
-    if (angle_rad < 0.0f) {
+    if (angle_rad < 0.0f)
+    {
         angle_rad += 2.0f * PI;
     }
     return angle_rad - PI;
 }
 
-Pose POSE(0.0f, 0.0f, 0.0f, 0.0f, 0.0f); 
+Pose POSE(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 Pose targetPose(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 Pose prevTargetPose(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 MovementType currentMovement = IDLE;
@@ -110,28 +112,31 @@ bool targetReached = true;
 class VController
 {
 public:
-    float ePrev = 0; 
+    float ePrev = 0;
     float eTot = 0;
     float Kp, Ki, Kd; // Kd not used
     uint64_t tPrev;
 
-    VController(float kp, float ki, float kd) : Kp(kp), Ki(ki), Kd(kd) {
+    VController(float kp, float ki, float kd) : Kp(kp), Ki(ki), Kd(kd)
+    {
         tPrev = time_us_64();
     }
 
-    float output(float vRef_mmps, float vCurrent_mmps) {
+    float output(float vRef_mmps, float vCurrent_mmps)
+    {
         float e = vRef_mmps - vCurrent_mmps;
         uint64_t t = time_us_64();
         float dt = static_cast<float>(t - tPrev) / 1000000.0f;
 
-        if (dt >= EPSILON) {
+        if (dt >= EPSILON)
+        {
             eTot += e * dt;
         }
-        // Optional: Clamp eTot 
+        // Optional: Clamp eTot
         // eTot = std::max(-MAX_ETOT_V, std::min(MAX_ETOT_V, eTot));
 
         float out_val = Kp * e + Ki * eTot; // Kd term: + Kd * (e - ePrev) / dt;
-        
+
         tPrev = t;
         ePrev = e;
         tPrev = t;
@@ -139,7 +144,8 @@ public:
         return out_val;
     }
 
-    void reset() {
+    void reset()
+    {
         eTot = 0;
         ePrev = 0;
         tPrev = time_us_64();
@@ -149,34 +155,38 @@ public:
 class WController
 {
 public:
-    float ePrev = 0; 
+    float ePrev = 0;
     float eTot = 0;
     float Kp, Ki, Kd; // Kd not used
     uint64_t tPrev;
 
-    WController(float kp, float ki, float kd) : Kp(kp), Ki(ki), Kd(kd) {
+    WController(float kp, float ki, float kd) : Kp(kp), Ki(ki), Kd(kd)
+    {
         tPrev = time_us_64();
     }
 
-    float output(float wRef_radps, float wCurrent_radps) { 
+    float output(float wRef_radps, float wCurrent_radps)
+    {
         float e = wRef_radps - wCurrent_radps; // Error in rad/s
         uint64_t t = time_us_64();
         float dt = static_cast<float>(t - tPrev) / 1000000.0f;
 
-        if (dt >= EPSILON) {
+        if (dt >= EPSILON)
+        {
             eTot += e * dt;
         }
         // Optional: Clamp eTot
         // eTot = std::max(-MAX_ETOT_W, std::min(MAX_ETOT_W, eTot));
 
         float out_val = Kp * e + Ki * eTot;
-        
+
         tPrev = t;
         ePrev = e;
-        return out_val; 
+        return out_val;
     }
 
-    void reset() {
+    void reset()
+    {
         eTot = 0;
         ePrev = 0;
         tPrev = time_us_64();
@@ -192,13 +202,15 @@ public:
     StanleyController(float k_ct, float k_s) : K_CT(k_ct), K_S(k_s) {}
 
     // Output is desired angular velocity (rad/s)
-    float output() {
+    float output()
+    {
         // POSE values are in mm, radians, mm/s, rad/s
         // targetPose values are in mm, radians, mm/s, rad/s
-        
+
         float desired_w_radps = 0.0f;
 
-        if (currentMovement == FWD) {
+        if (currentMovement == FWD)
+        {
             // Cross-track error e_ct (mm)
             // Path is a line defined by (targetPose.x, targetPose.y) and angle targetPose.theta
             // e_ct = (POSE.x - targetPose.x) * sin(targetPose.theta) - (POSE.y - targetPose.y) * cos(targetPose.theta)
@@ -207,7 +219,7 @@ public:
             float dx = POSE.x - targetPose.x; // Vector from target point on path to robot
             float dy = POSE.y - targetPose.y;
             float path_angle_rad = targetPose.theta; // Robot should follow this orientation
-            
+
             // Cross-track error: perpendicular distance to the line.
             // The line passes through targetPose.x, targetPose.y with angle targetPose.theta.
             // A point on this line is (targetPose.x, targetPose.y).
@@ -222,29 +234,33 @@ public:
             // Error relative to path line x*sin(th_p) - y*cos(th_p) - (x_p*sin(th_p) - y_p*cos(th_p)) = 0
             e_ct_mm = (POSE.x - targetPose.x) * sinf(targetPose.theta) - (POSE.y - targetPose.y) * cosf(targetPose.theta);
 
-
             // Heading error psi (radians)
             float psi_rad = normalize_angle_pi_pi(POSE.theta - targetPose.theta);
 
             // Effective velocity for atan2 term
-            float v_effective_mmps = fabsf(POSE.v) + K_S; 
-            if (v_effective_mmps < 10.0f) v_effective_mmps = 10.0f; // Avoid issues at very low speed (e.g. 10mm/s)
+            float v_effective_mmps = fabsf(POSE.v) + K_S;
+            if (v_effective_mmps < 10.0f)
+                v_effective_mmps = 10.0f; // Avoid issues at very low speed (e.g. 10mm/s)
 
             // Steering angle delta (radians)
             float delta_rad = psi_rad + atan2f(K_CT * e_ct_mm, v_effective_mmps);
             delta_rad = normalize_angle_pi_pi(delta_rad); // Keep delta reasonable
 
             // Convert steering angle delta to angular velocity W = v * tan(delta) / L
-            if (fabsf(targetPose.v) < EPSILON) { 
-                 desired_w_radps = K_CT * psi_rad; // If not moving, just correct heading slowly
-            } else {
-                 // Clamp delta_rad to avoid extreme tan values, e.g., +/- PI/3 (60 deg)
-                 delta_rad = std::max(-PI/3.0f, std::min(PI/3.0f, delta_rad));
-                 desired_w_radps = (targetPose.v / WHEEL_BASE_MM) * tanf(delta_rad);
+            if (fabsf(targetPose.v) < EPSILON)
+            {
+                desired_w_radps = K_CT * psi_rad; // If not moving, just correct heading slowly
+            }
+            else
+            {
+                // Clamp delta_rad to avoid extreme tan values, e.g., +/- PI/3 (60 deg)
+                delta_rad = std::max(-PI / 3.0f, std::min(PI / 3.0f, delta_rad));
+                desired_w_radps = (targetPose.v / WHEEL_BASE_MM) * tanf(delta_rad);
             }
             // printf("Stanley FWD: e_ct:%.1fmm psi:%.2frad delta:%.2frad -> W_des:%.2frad/s\n", e_ct_mm, psi_rad, delta_rad, desired_w_radps);
-
-        } else if (currentMovement == TURN_L || currentMovement == TURN_R) {
+        }
+        else if (currentMovement == TURN_L || currentMovement == TURN_R)
+        {
             float xRoot_mm = 0, yRoot_mm = 0; // Center of the turn circle (mm)
             bool root_defined = false;
 
@@ -254,31 +270,65 @@ public:
 
             // Angle comparisons (e.g., if prev_th_rad is close to 0, PI/2, etc.)
             // 0 rad: +X, PI/2 rad: +Y, PI rad: -X, -PI/2 rad: -Y
-            if (currentMovement == TURN_L) { // Turning CCW
-                if (fabsf(prev_th_rad - 0.0f) < 0.1f) { // Was going +X, turning Left (towards +Y)
-                    xRoot_mm = prevTargetPose.x; yRoot_mm = prevTargetPose.y + TURN_RADIUS; root_defined = true;
-                } else if (fabsf(prev_th_rad - (PI/2.0f)) < 0.1f) { // Was going +Y, turning Left (towards -X)
-                    xRoot_mm = prevTargetPose.x - TURN_RADIUS; yRoot_mm = prevTargetPose.y; root_defined = true;
-                } else if (fabsf(fabsf(prev_th_rad) - PI) < 0.1f) { // Was going -X (theta ~ PI or -PI)
-                    xRoot_mm = prevTargetPose.x; yRoot_mm = prevTargetPose.y - TURN_RADIUS; root_defined = true;
-                } else if (fabsf(prev_th_rad - (-PI/2.0f)) < 0.1f) { // Was going -Y
-                    xRoot_mm = prevTargetPose.x + TURN_RADIUS; yRoot_mm = prevTargetPose.y; root_defined = true;
+            if (currentMovement == TURN_L)
+            { // Turning CCW
+                if (fabsf(prev_th_rad - 0.0f) < 0.1f)
+                { // Was going +X, turning Left (towards +Y)
+                    xRoot_mm = prevTargetPose.x;
+                    yRoot_mm = prevTargetPose.y + TURN_RADIUS;
+                    root_defined = true;
                 }
-            } else { // TURN_R (Turning CW)
-                 if (fabsf(prev_th_rad - 0.0f) < 0.1f) { // Was going +X, turning Right (towards -Y)
-                    xRoot_mm = prevTargetPose.x; yRoot_mm = prevTargetPose.y - TURN_RADIUS; root_defined = true;
-                } else if (fabsf(prev_th_rad - (PI/2.0f)) < 0.1f) { // Was going +Y, turning Right (towards +X)
-                    xRoot_mm = prevTargetPose.x + TURN_RADIUS; yRoot_mm = prevTargetPose.y; root_defined = true;
-                } else if (fabsf(fabsf(prev_th_rad) - PI) < 0.1f) { // Was going -X
-                    xRoot_mm = prevTargetPose.x; yRoot_mm = prevTargetPose.y + TURN_RADIUS; root_defined = true;
-                } else if (fabsf(prev_th_rad - (-PI/2.0f)) < 0.1f) { // Was going -Y
-                    xRoot_mm = prevTargetPose.x - TURN_RADIUS; yRoot_mm = prevTargetPose.y; root_defined = true;
+                else if (fabsf(prev_th_rad - (PI / 2.0f)) < 0.1f)
+                { // Was going +Y, turning Left (towards -X)
+                    xRoot_mm = prevTargetPose.x - TURN_RADIUS;
+                    yRoot_mm = prevTargetPose.y;
+                    root_defined = true;
+                }
+                else if (fabsf(fabsf(prev_th_rad) - PI) < 0.1f)
+                { // Was going -X (theta ~ PI or -PI)
+                    xRoot_mm = prevTargetPose.x;
+                    yRoot_mm = prevTargetPose.y - TURN_RADIUS;
+                    root_defined = true;
+                }
+                else if (fabsf(prev_th_rad - (-PI / 2.0f)) < 0.1f)
+                { // Was going -Y
+                    xRoot_mm = prevTargetPose.x + TURN_RADIUS;
+                    yRoot_mm = prevTargetPose.y;
+                    root_defined = true;
                 }
             }
-            
-            if (!root_defined) {
+            else
+            { // TURN_R (Turning CW)
+                if (fabsf(prev_th_rad - 0.0f) < 0.1f)
+                { // Was going +X, turning Right (towards -Y)
+                    xRoot_mm = prevTargetPose.x;
+                    yRoot_mm = prevTargetPose.y - TURN_RADIUS;
+                    root_defined = true;
+                }
+                else if (fabsf(prev_th_rad - (PI / 2.0f)) < 0.1f)
+                { // Was going +Y, turning Right (towards +X)
+                    xRoot_mm = prevTargetPose.x + TURN_RADIUS;
+                    yRoot_mm = prevTargetPose.y;
+                    root_defined = true;
+                }
+                else if (fabsf(fabsf(prev_th_rad) - PI) < 0.1f)
+                { // Was going -X
+                    xRoot_mm = prevTargetPose.x;
+                    yRoot_mm = prevTargetPose.y + TURN_RADIUS;
+                    root_defined = true;
+                }
+                else if (fabsf(prev_th_rad - (-PI / 2.0f)) < 0.1f)
+                { // Was going -Y
+                    xRoot_mm = prevTargetPose.x - TURN_RADIUS;
+                    yRoot_mm = prevTargetPose.y;
+                    root_defined = true;
+                }
+            }
+
+            if (!root_defined)
+            {
                 // printf("Stanley TURN: ERROR - Could not determine turn center. PrevTh: %.2frad\n", prev_th_rad);
-                return 0.0f; 
+                return 0.0f;
             }
 
             // Cross-track error for circular path (mm)
@@ -287,38 +337,47 @@ public:
             // Desired heading (tangent to circle)
             float angle_to_pose_rad = atan2f(POSE.y - yRoot_mm, POSE.x - xRoot_mm);
             float desired_heading_rad;
-            if (currentMovement == TURN_L) {
+            if (currentMovement == TURN_L)
+            {
                 desired_heading_rad = angle_to_pose_rad + PI / 2.0f;
-            } else { // TURN_R
+            }
+            else
+            { // TURN_R
                 desired_heading_rad = angle_to_pose_rad - PI / 2.0f;
             }
             desired_heading_rad = normalize_angle_pi_pi(desired_heading_rad);
-            
+
             // Heading error psi (rad)
             float psi_rad = normalize_angle_pi_pi(POSE.theta - desired_heading_rad);
             // Alternative: psi error w.r.t final target orientation of the turn.
             // float psi_rad = normalize_angle_pi_pi(POSE.theta - targetPose.theta);
 
-
             float v_effective_mmps = fabsf(POSE.v) + K_S;
-            if (v_effective_mmps < 10.0f) v_effective_mmps = 10.0f;
+            if (v_effective_mmps < 10.0f)
+                v_effective_mmps = 10.0f;
 
             float delta_rad = psi_rad + atan2f(K_CT * e_ct_mm, v_effective_mmps);
             delta_rad = normalize_angle_pi_pi(delta_rad);
-            delta_rad = std::max(-PI/3.0f, std::min(PI/3.0f, delta_rad)); // Clamp steering
+            delta_rad = std::max(-PI / 3.0f, std::min(PI / 3.0f, delta_rad)); // Clamp steering
 
-            if (fabsf(targetPose.v) < EPSILON) {
-                 desired_w_radps = 0.0f;
-            } else {
-                 desired_w_radps = (targetPose.v / WHEEL_BASE_MM) * tanf(delta_rad);
-                 // Cap based on nominal turn rate
-                 float cap = W_MAX_NOMINAL * 1.2f; // Allow some overshoot from nominal
-                 if (desired_w_radps > cap) desired_w_radps = cap;
-                 if (desired_w_radps < -cap) desired_w_radps = -cap;
+            if (fabsf(targetPose.v) < EPSILON)
+            {
+                desired_w_radps = 0.0f;
+            }
+            else
+            {
+                desired_w_radps = (targetPose.v / WHEEL_BASE_MM) * tanf(delta_rad);
+                // Cap based on nominal turn rate
+                float cap = W_MAX_NOMINAL * 1.2f; // Allow some overshoot from nominal
+                if (desired_w_radps > cap)
+                    desired_w_radps = cap;
+                if (desired_w_radps < -cap)
+                    desired_w_radps = -cap;
             }
             // printf("Stanley TURN: e_ct:%.1fmm psi:%.2frad delta:%.2frad -> W_des:%.2frad/s\n", e_ct_mm, psi_rad, delta_rad, desired_w_radps);
-
-        } else { // STOP_CMD or IDLE
+        }
+        else
+        { // STOP_CMD or IDLE
             desired_w_radps = 0.0f;
         }
         return desired_w_radps;
@@ -391,18 +450,20 @@ std::pair<float, float> controlLoop(float vTarget, float wTarget)
     return {dutyL, dutyR};
 }
 
-void setTarget(Command command) {
+void setTarget(Command command)
+{
     prevTargetPose = targetPose; // The target we just arrived at (or current POSE if first command)
 
-    targetReached = false; 
+    targetReached = false;
 
-    if (command.action == "FWD") {
+    if (command.action == "FWD")
+    {
         currentMovement = FWD;
         targetPose.v = V_MAX; // Target speed in mm/s
         targetPose.w = 0.0f;  // Nominal angular velocity for FWD is 0
 
         // Current orientation of the robot (rad)
-        float current_pose_theta_rad = POSE.theta; 
+        float current_pose_theta_rad = POSE.theta;
         targetPose.theta = current_pose_theta_rad; // Maintain current orientation for FWD path
 
         float distance_mm = CELL_WIDTH * command.value; // command.value is number of cells
@@ -410,40 +471,42 @@ void setTarget(Command command) {
         // Update target X, Y based on current POSE.theta (radians, 0 along +X)
         targetPose.x = POSE.x + distance_mm * cosf(current_pose_theta_rad);
         targetPose.y = POSE.y + distance_mm * sinf(current_pose_theta_rad);
-
-    } else if (command.action == "TRN") {
+    }
+    else if (command.action == "TRN")
+    {
         targetPose.v = V_MAX * 0.5f; // Slower speed for turns (mm/s)
-        
+
         float turn_angle_rad = command.value; // radians, positive for left (CCW)
-        if (turn_angle_rad > 0) currentMovement = TURN_L;
-        else currentMovement = TURN_R;
+        if (turn_angle_rad > 0)
+            currentMovement = TURN_L;
+        else
+            currentMovement = TURN_R;
 
         targetPose.theta = normalize_angle_pi_pi(POSE.theta + turn_angle_rad); // New target orientation
-        
+
         // Nominal angular speed for turn (rad/s)
         float nominal_turn_w = (turn_angle_rad > 0 ? W_MAX_NOMINAL : -W_MAX_NOMINAL) * 0.75f; // Use 75% of max nominal for stability
-        targetPose.w = nominal_turn_w; 
+        targetPose.w = nominal_turn_w;
 
         // For turns, target X,Y is generally the current location if it's an in-place turn.
         // Stanley controller's turn logic uses prevTargetPose to define the arc.
         targetPose.x = POSE.x;
         targetPose.y = POSE.y;
-
-
-        
-    } else if (command.action == "STOP") {
+    }
+    else if (command.action == "STOP")
+    {
         currentMovement = STOP_CMD;
         targetPose.v = 0.0f;
         targetPose.w = 0.0f;
-        targetPose.x = POSE.x; 
+        targetPose.x = POSE.x;
         targetPose.y = POSE.y;
-        targetPose.theta = POSE.theta; 
-        targetReached = true; 
+        targetPose.theta = POSE.theta;
+        targetReached = true;
     }
 }
 
 constexpr float DEFAULT_MAX_SENSOR_RANGE_MM = 255.0f;
-constexpr float FRONT_MAX_SENSOR_RANGE_MM = 5.0f * 255.0f; // Front sensor has longer range
+constexpr float FRONT_MAX_SENSOR_RANGE_MM = 10.0f * 255.0f; // Front sensor has longer range
 
 #define CELL_SIZE_MM 180.0f
 
@@ -641,6 +704,9 @@ constexpr float max_sensor_ranges_mm[] = {
     DEFAULT_MAX_SENSOR_RANGE_MM,
     DEFAULT_MAX_SENSOR_RANGE_MM};
 
+std::random_device random_device;
+std::mt19937 rand_gen(random_device());
+
 void update_tof_sensor_data_ray_marching_cpp(
     Vec2f noisy_sensor_points[NUM_TOF_SENSORS], // Output array for intersection points
     bool valid_readings[NUM_TOF_SENSORS],       // Output array for validity
@@ -663,9 +729,6 @@ void update_tof_sensor_data_ray_marching_cpp(
         DEFAULT_MAX_SENSOR_RANGE_MM,
         DEFAULT_MAX_SENSOR_RANGE_MM,
         DEFAULT_MAX_SENSOR_RANGE_MM};
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
 
     for (int i = 0; i < NUM_TOF_SENSORS; ++i)
     {
@@ -696,8 +759,8 @@ void update_tof_sensor_data_ray_marching_cpp(
             {
                 float noise_std_dev = noise_factor * distance_for_noise;
                 std::normal_distribution<float> dist(0.0f, noise_std_dev);
-                Vec2f noise(dist(gen), dist(gen));
-                noisy_sensor_points[i] = result.point + noise;
+                Vec2f noise(dist(rand_gen), dist(rand_gen));
+                noisy_sensor_points[i] = result.point; // + noise;
             }
             else
             {
@@ -841,7 +904,7 @@ void parse_maze_string(const char *maze_str_input)
     }
 }
 
-#define NUM_PARTICLES 500
+#define NUM_PARTICLES 3000
 
 Particle particles_a[NUM_PARTICLES] = {};
 Particle particles_b[NUM_PARTICLES] = {};
@@ -849,28 +912,47 @@ Particle particles_b[NUM_PARTICLES] = {};
 Particle *particles = particles_a;     // Pointer to current particle set
 Particle *new_particles = particles_b; // Pointer to new particle set
 
-float rand_gauss(float mean, float stddev) { 
-    static bool has_spare = false;
-    static float spare_gaussian;
-    if (has_spare) {
-        has_spare = false;
-        return mean + stddev * spare_gaussian;
+float rand_gauss(float mean, float stddev)
+{
+    std::normal_distribution<float> dist(mean, stddev);
+    return dist(rand_gen);
+}
+
+float rand_uniform(float min, float max)
+{
+    std::uniform_real_distribution<float> dist(min, max);
+    return dist(rand_gen);
+}
+
+float random_angle()
+{
+    // Generate a random angle in radians between 0 and 2*PI
+    return rand_uniform(0.0f, 2.0f * (float)PI);
+}
+
+Vec2f sample_around_pose()
+{
+    float radius = rand_uniform(0.0f, 100.0f);
+    float angle = random_angle();
+    float x = POSE.x + radius * cosf(angle);
+    float y = POSE.y + radius * sinf(angle);
+    return Vec2f(x, y);
+}
+
+void resample_particles() 
+{
+    for (int i = 0; i < NUM_PARTICLES; ++i)
+    {
+        particles[i].pos = sample_around_pose();
+        particles[i].rot_rad = POSE.theta + rand_uniform(-0.3f, 0.3f);
+        particles[i].weight = 1.0f / NUM_PARTICLES;
     }
-    has_spare = true;
-    float u1 = (float)rand() / RAND_MAX;
-    float u2 = (float)rand() / RAND_MAX;
-    if (u1 < 1e-6f) u1 = 1e-6f; 
-    float z0 = sqrtf(-2.0f * logf(u1)) * cosf(2.0f * PI * u2);
-    spare_gaussian = sqrtf(-2.0f * logf(u1)) * sinf(2.0f * PI * u2);
-    return mean + stddev * z0;
 }
 
 void localize_particles()
 {
-    // Read actual TOF measurements
-    global_read_tofs();
-
     float weight_sum = 0.0f;
+    int valid_sensor_count = 0;
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
         Particle &p = particles[i];
@@ -881,21 +963,25 @@ void localize_particles()
         update_tof_sensor_data_ray_marching_cpp(sim_points, sim_valid, p.pos, p.rot_rad);
 
         float total_error = 0.0f;
-        for (int i = 0; i < NUM_TOF_SENSORS; ++i)
+        for (int j = 0; j < NUM_TOF_SENSORS; ++j)
         {
-            if (!MM_VALID[i] || !sim_valid[i])
+            if (!MM_VALID[j] || !sim_valid[j])
                 continue;
 
-            Vec2f sim_origin = get_tof_location_cpp(p.pos, p.rot_rad, i);
-            float sim_dist = (sim_points[i] - sim_origin).norm();
-            float real_dist = static_cast<float>(MM[i]);
+            Vec2f sim_origin = get_tof_location_cpp(p.pos, p.rot_rad, j);
+            float sim_dist = (sim_points[j] - sim_origin).norm();
+            float real_dist = static_cast<float>(MM[j]);
 
             float diff = real_dist - sim_dist;
+            // printf("Particle %d Sensor %d: Real: %.1fmm, Simulated: %.1fmm, Diff: %.1fmm\n", i, j, real_dist, sim_dist, diff);
             total_error += diff * diff;
+            valid_sensor_count++;
         }
 
-        // Likelihood using Gaussian model
-        p.weight = expf(-total_error / SENSOR_NOISE_VAR);
+        float sigma_sq = SENSOR_NOISE_VAR;
+        float avg_error = total_error / (float)(valid_sensor_count + 1e-5f);
+        p.weight = fmaxf(expf(-avg_error / (2.0f * sigma_sq)), 1e-30f);
+
         weight_sum += p.weight;
     }
 
@@ -903,10 +989,7 @@ void localize_particles()
     if (weight_sum <= 1e-6f)
     {
         printf("WARNING: Total weight is zero! Resetting weights.\n");
-        for (int i = 0; i < NUM_PARTICLES; ++i)
-        {
-            particles[i].weight = 1.0f / NUM_PARTICLES;
-        }
+        resample_particles();
     }
     else
     {
@@ -917,7 +1000,7 @@ void localize_particles()
     }
 
     // Low-variance resampling
-    float r = ((float)rand() / RAND_MAX) / NUM_PARTICLES;
+    float r = rand_uniform(0.0f, 1.0f) / NUM_PARTICLES;
     float c = particles[0].weight;
     int i = 0;
 
@@ -931,49 +1014,71 @@ void localize_particles()
         }
         new_particles[m] = particles[i];
 
-        new_particles[m].pos.x += rand_gauss(0.0f, 3.0f);    // mm
-        new_particles[m].pos.y += rand_gauss(0.0f, 3.0f);    // mm
-        new_particles[m].rot_rad += rand_gauss(0.0f, 0.05f); // radians
+        new_particles[m].pos.x += rand_gauss(0.0f, 2.0f);  // mm
+        new_particles[m].pos.y += rand_gauss(0.0f, 2.0f);  // mm
+        new_particles[m].rot_rad += rand_gauss(0.0f, 0.02f); // radians
     }
-
     std::swap(particles, new_particles);
-}
-
-float random_angle()
-{
-    // Generate a random angle in radians between 0 and 2*PI
-    return static_cast<float>(rand()) / RAND_MAX * 2.0f * (float)PI;
 }
 
 Vec2f random_free_cell_center()
 {
-    int x = rand() % (MAZE_SIZE + 1);
-    int y = rand() % (MAZE_SIZE + 1);
+    int x = (int)rand_uniform(0, MAZE_SIZE); // Random cell index in [0, MAZE_SIZE)
+    int y = (int)rand_uniform(0, MAZE_SIZE); // Random cell index in [0, MAZE_SIZE)
 
     return Vec2f((x + 0.5f) * CELL_SIZE_MM, (y + 0.5f) * CELL_SIZE_MM);
-}
-
-Vec2f sample_around_start_point()
-{
-    // Sample a random point around the start point (0, 0) within a certain radius
-    float radius = rand() % (int)(CELL_SIZE_MM * 2.0f); // Random radius up to 2 cells
-    float angle = random_angle();
-    float x = radius * cosf(angle);
-    float y = radius * sinf(angle);
-    return Vec2f(x, y);
 }
 
 void motion_update(float dx, float dy, float drot)
 {
     for (int i = 0; i < NUM_PARTICLES; ++i)
     {
-        float noise_x = rand_gauss(0.0f, 5.0f);    // mm
-        float noise_y = rand_gauss(0.0f, 5.0f);    // mm
-        float noise_rot = rand_gauss(0.0f, 0.05f); // radians
+        float x = particles[i].pos.x;
+        float y = particles[i].pos.y;
 
-        particles[i].pos.x += dx + noise_x;
-        particles[i].pos.y += dy + noise_y;
-        particles[i].rot_rad += drot + noise_rot;
+        float nx = x + dx;
+        float ny = y + dy;
+
+        int old_cell_x = (int)(x / CELL_SIZE_MM);
+        int old_cell_y = 15 - (int)(y / CELL_SIZE_MM);
+
+        int cell_x = (int)(nx / CELL_SIZE_MM);
+        int cell_y = 15 - (int)(ny / CELL_SIZE_MM);
+
+        if (old_cell_x != cell_x || old_cell_y != cell_y)
+        {
+            // Check if the new cell is valid
+            if (cell_x < 0 || cell_x >= MAZE_SIZE || cell_y < 0 || cell_y >= MAZE_SIZE)
+            {
+                // Out of bounds, reset to old position
+                nx = x;
+                ny = y;
+            }
+            else
+            {
+                Direction dir;
+                if (cell_x > old_cell_x) dir = Direction::WEST;
+                else if (cell_x < old_cell_x) dir = Direction::EAST;
+                else if (cell_y > old_cell_y) dir = Direction::NORTH;
+                else if (cell_y < old_cell_y) dir = Direction::SOUTH;
+
+                Cell &new_cell = MAZE_MATRIX[cell_y][cell_x];
+                if (new_cell.walls & (1 << (int)dir))
+                {
+                    // Wall encountered — revert
+                    nx = x;
+                    ny = y;
+                }
+            }
+        }
+
+        float noise_x = rand_gauss(0.0f, 1.0f);    // mm
+        float noise_y = rand_gauss(0.0f, 1.0f);    // mm
+        float noise_rot = rand_gauss(0.0f, 0.01f); // radians
+
+        particles[i].pos.x = nx + noise_x;
+        particles[i].pos.y = ny + noise_y;
+        particles[i].rot_rad = normalize_angle_pi_pi(particles[i].rot_rad + drot + noise_rot);
     }
 }
 
@@ -998,28 +1103,32 @@ void estimate_pose_from_particles()
         avg_cos_rot += cosf(particles[i].rot_rad) * particles[i].weight;
     }
 
-    // If weights were not re-normalized to sum to 1 after resampling:
-    // if (total_weight > EPSILON) {
-    //    avg_pos_mm.x /= total_weight;
-    //    avg_pos_mm.y /= total_weight;
-    //    avg_sin_rot /= total_weight;
-    //    avg_cos_rot /= total_weight;
-    // }
+    if (total_weight > EPSILON)
+    {
+        avg_pos_mm.x /= total_weight;
+        avg_pos_mm.y /= total_weight;
+        avg_sin_rot /= total_weight;
+        avg_cos_rot /= total_weight;
+    }
 
     // Convert from particle frame (mm, rad from +X CCW) to POSE frame (m, deg [0,360) 0=+Y, 90=-X)
     float est_x_mm = avg_pos_mm.x;
     float est_y_mm = avg_pos_mm.y;
 
-    float est_rot_rad_atan2 = atan2f(avg_sin_rot, avg_cos_rot);  // Angle from +X, CCW
-    float est_rot_deg_atan2 = est_rot_rad_atan2 * 180.0f / PI; // [-180, 180]
+    float est_rot_rad_atan2 = atan2f(avg_sin_rot, avg_cos_rot); // Angle from +X, CCW
+    // float est_rot_deg_atan2 = est_rot_rad_atan2 * 180.0f / PI; // [-180, 180]
 
     POSE.x = est_x_mm;
     POSE.y = est_y_mm;
-    POSE.theta = normalize_angle_pi_pi(est_rot_deg_atan2);
+    POSE.theta = normalize_angle_pi_pi(est_rot_rad_atan2);
+
+    printf("Estimated pose: x=%.2fmm, y=%.2fmm, th=%.1fdeg\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI);
 }
 
-bool checkTargetReached() {
-    if (currentMovement == IDLE || currentMovement == STOP_CMD) return true;
+bool checkTargetReached()
+{
+    if (currentMovement == IDLE || currentMovement == STOP_CMD)
+        return true;
 
     float dx_mm = POSE.x - targetPose.x;
     float dy_mm = POSE.y - targetPose.y;
@@ -1030,13 +1139,16 @@ bool checkTargetReached() {
 
     float dist_thresh_mm, angle_thresh_rad;
 
-    if (currentMovement == FWD) {
+    if (currentMovement == FWD)
+    {
         dist_thresh_mm = 20.0f; // 20 mm
-        
+
         // For FWD, primarily check distance. Angle is less critical once on path.
         return dist_sq_mm < (dist_thresh_mm * dist_thresh_mm);
-    } else if (currentMovement == TURN_L || currentMovement == TURN_R) {
-        angle_thresh_rad = 5 * (PI / 180);  // 5 degrees
+    }
+    else if (currentMovement == TURN_L || currentMovement == TURN_R)
+    {
+        angle_thresh_rad = 5 * (PI / 180); // 5 degrees
         // For turns, primary check is orientation.
         return angle_diff_rad < angle_thresh_rad;
     }
@@ -1049,35 +1161,43 @@ bool checkTargetReached() {
 #define TOF_SIDE_LEFT_IDX ((int)TOF_Direction::LEFT)
 #define TOF_SIDE_RIGHT_IDX ((int)TOF_Direction::RIGHT)
 
-#define WALL_DIST_THRESHOLD_MM 100.0f 
-#define SIDE_WALL_CLEAR_MM 150.0f 
+#define WALL_DIST_THRESHOLD_MM 100.0f
+#define SIDE_WALL_CLEAR_MM 150.0f
 
-Command decide_next_action_tof_based() {
+Command decide_next_action_tof_based()
+{
     bool wall_F = MM_VALID[TOF_FRONT_IDX] && MM[TOF_FRONT_IDX] < WALL_DIST_THRESHOLD_MM;
-    
+
     bool passage_L = MM_VALID[TOF_SIDE_LEFT_IDX] && MM[TOF_SIDE_LEFT_IDX] > SIDE_WALL_CLEAR_MM;
     bool passage_R = MM_VALID[TOF_SIDE_RIGHT_IDX] && MM[TOF_SIDE_RIGHT_IDX] > SIDE_WALL_CLEAR_MM;
 
     // Fallback using diagonal if side sensors are not good
-    if (!MM_VALID[TOF_SIDE_LEFT_IDX]) passage_L = MM_VALID[TOF_LEFT_DIAG_IDX] && MM[TOF_LEFT_DIAG_IDX] > WALL_DIST_THRESHOLD_MM * 1.2f;
-    if (!MM_VALID[TOF_SIDE_RIGHT_IDX]) passage_R = MM_VALID[TOF_RIGHT_DIAG_IDX] && MM[TOF_RIGHT_DIAG_IDX] > WALL_DIST_THRESHOLD_MM * 1.2f;
+    if (!MM_VALID[TOF_SIDE_LEFT_IDX])
+        passage_L = MM_VALID[TOF_LEFT_DIAG_IDX] && MM[TOF_LEFT_DIAG_IDX] > WALL_DIST_THRESHOLD_MM * 1.2f;
+    if (!MM_VALID[TOF_SIDE_RIGHT_IDX])
+        passage_R = MM_VALID[TOF_RIGHT_DIAG_IDX] && MM[TOF_RIGHT_DIAG_IDX] > WALL_DIST_THRESHOLD_MM * 1.2f;
 
-    if (!wall_F) {
+    if (!wall_F)
+    {
         return {"FWD", 1.0f}; // Move 1 cell forward
-    } else if (passage_R) { 
-        return {"TRN", -PI/2.0f}; // Turn Right (approx -90 deg)
-    } else if (passage_L) { 
-        return {"TRN", PI/2.0f};  // Turn Left (approx +90 deg)
-    } else { 
-        return {"TRN", PI/2.0f};  // Default to left turn if stuck
+    }
+    else if (passage_R)
+    {
+        return {"TRN", -PI / 2.0f}; // Turn Right (approx -90 deg)
+    }
+    else if (passage_L)
+    {
+        return {"TRN", PI / 2.0f}; // Turn Left (approx +90 deg)
+    }
+    else
+    {
+        return {"TRN", PI / 2.0f}; // Default to left turn if stuck
     }
 }
 
 int main()
 {
-    srand(time(NULL)); // Seed the random number generator
-
-    Queue commandQueue = {Command {"FWD", 3}, Command {"TRN", -90}, Command {"FWD", 2}, Command {"STOP", 0}};
+    Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -90}, Command{"FWD", 2}, Command{"STOP", 0}};
 
     parse_maze_string(MAZE_ASCII_ART);
     print_maze();
@@ -1085,17 +1205,11 @@ int main()
     global_init();
 
     POSE.x = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
-    // POSE.y = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
-    POSE.y = 0; // Start at back of first cell
-    POSE.theta = PI / 2.0f; // Facing "up" in the maze (0 degrees is +Y)
-    printf("Initial pose: x=%.2fm, y=%.2fm, th=%.1fdeg\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI);
+    POSE.y = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
+    POSE.theta = PI / 2.0f;       // Facing "up" in the maze (0 degrees is +Y)
+    printf("Initial pose: x=%.2fmm, y=%.2fmm, th=%.1fdeg\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI);
 
-    for (int i = 0; i < NUM_PARTICLES; ++i)
-    {
-        particles[i].pos = sample_around_start_point();
-        particles[i].rot_rad = random_angle();
-        particles[i].weight = 1.0f / NUM_PARTICLES;
-    }
+    resample_particles();
 
     uint64_t loop_time_prev_us = time_us_64();
     int loop_count = 0;
@@ -1117,64 +1231,54 @@ int main()
         MotorL.update();
         MotorR.update();
 
-        // Determine robot movement direction based on motor directions
-        bool left_forward = (MotorL.DIR == FORWARD);
-        bool right_forward = (MotorR.DIR == FORWARD);
+        float dx_left_mm = MotorL.DELTA_POS;  // Delta mm for left wheel
+        float dx_right_mm = MotorR.DELTA_POS; // Delta mm for right wheel
 
-        if (left_forward && right_forward)
-        {
-            // printf("Robot is moving forward\n");
-        }
-        else if (!left_forward && !right_forward)
-        {
-            // printf("Robot is moving backward\n");
-        }
-        else
-        {
-            // printf("Robot is turning\n");
-        }
-
-        float dx_left_mm = MotorL.DELTA_POS;  // Delta mm for left wheel, always positive
-        float dx_right_mm = MotorR.DELTA_POS; // Delta mm for right wheel, always positive
-
-        float delta_s_body_mm;
-        if (left_forward && right_forward)
-        {
-            delta_s_body_mm = (dx_left_mm + dx_right_mm) / 2.0f; // Forward displacement of robot center
-        }
-        else if (!left_forward && !right_forward)
-        {
-            // Both wheels moving backward
-            delta_s_body_mm = -(dx_left_mm + dx_right_mm) / 2.0f;
-        }
-        else
-        {
-            // One wheel moving forward, the other backward
-            delta_s_body_mm = (dx_right_mm - dx_left_mm) / 2.0f;
-        }
+        float delta_s_body_mm = (dx_left_mm + dx_right_mm) / 2.0f; // Forward displacement of robot center
         float delta_theta_rad = (dx_right_mm - dx_left_mm) / ROBOT_WHEEL_BASE_MM;
 
-        float rps = GYRO_Z * (float)PI / 180.0f; // Convert degrees per second to radians per second
-        POSE.w = rps; // Update POSE.w with gyro reading
+        if (delta_s_body_mm > 0)
+        {
+            printf("Robot is moving forward\n");
+        }
+        else if (delta_s_body_mm < 0)
+        {
+            printf("Robot is moving backward\n");
+        }
+        else if (delta_theta_rad > EPSILON)
+        {
+            printf("Robot is turning left\n");
+        }
+        else if (delta_theta_rad < -EPSILON)
+        {
+            printf("Robot is turning right\n");
+        }
 
-        float drot_rad_imu = rps * dt;             // Change in rotation in radians
+        float rps = GYRO_Z * (float)PI / 180.0f; // Convert degrees per second to radians per second
+        POSE.w = rps;                            // Update POSE.w with gyro reading
+
+        // printf("Gyro Z: %.2f deg/s, %.2f rad/s\n", GYRO_Z, rps);
+
+        float drot_rad_imu = rps * dt; // Change in rotation in radians
 
         // printf("Delta theta from motors: %.2f rad, Delta theta from IMU: %.2f rad\n", delta_theta_rad, drot_rad_imu);
 
         float odom_dx_world_mm = delta_s_body_mm * cosf(POSE.theta);
         float odom_dy_world_mm = delta_s_body_mm * sinf(POSE.theta);
 
-        // printf("dx: %.2f mm, dy: %.2f mm\n", odom_dx_world_mm, odom_dy_world_mm);
+        printf("dx: %.2f mm, dy: %.2f mm\n", odom_dx_world_mm, odom_dy_world_mm);
 
         motion_update(odom_dx_world_mm, odom_dy_world_mm, drot_rad_imu);
-        POSE.x += odom_dx_world_mm;
-        POSE.y += odom_dy_world_mm;
-        // estimate_pose_from_particles();
+        localize_particles(); // Update particle weights and resample
 
-        // printf(">>> vizPARTICLES ");
-        for (int i = 0; i < NUM_PARTICLES; ++i)
+        // POSE.x += odom_dx_world_mm;
+        // POSE.y += odom_dy_world_mm;
+        estimate_pose_from_particles();
+
+        printf(">>> vizPARTICLES ");
+        for (int i = 0; i < NUM_PARTICLES; i += 50)
         {
-            ;// printf("%.2f %.2f %.2f ", particles[i].pos.x, particles[i].pos.y, particles[i].rot_rad);
+            printf("%.2f %.2f %.2f ", particles[i].pos.x, particles[i].pos.y, particles[i].rot_rad);
         }
         printf("\n");
         fflush(stdout);
@@ -1199,15 +1303,15 @@ int main()
 
         float rpm_L = MotorL.RPM;
         float rpm_R = MotorR.RPM;
-        float v_wheel_L_mmps = rpm_L * (1.0f/60.0f) * (2.0f * PI * WHEEL_RADIUS_MM);
-        float v_wheel_R_mmps = rpm_R * (1.0f/60.0f) * (2.0f * PI * WHEEL_RADIUS_MM);
+        float v_wheel_L_mmps = rpm_L * (1.0f / 60.0f) * (2.0f * PI * WHEEL_RADIUS_MM);
+        float v_wheel_R_mmps = rpm_R * (1.0f / 60.0f) * (2.0f * PI * WHEEL_RADIUS_MM);
 
-        POSE.v = (v_wheel_L_mmps + v_wheel_R_mmps) / 2.0f;           // m/s
-        //POSE.w = (rpm_R - rpm_L) / (WHEEL_BASE_M) * (2.0f * PI * WHEEL_RADIUS_M) / 60.0f; // rad/s (R>L means CCW for math angle, check convention)
-        //                                                                                    // If using "setTarget" theta, R>L is a left turn (positive W)
+        POSE.v = (v_wheel_L_mmps + v_wheel_R_mmps) / 2.0f; // m/s
+        // POSE.w = (rpm_R - rpm_L) / (WHEEL_BASE_M) * (2.0f * PI * WHEEL_RADIUS_M) / 60.0f; // rad/s (R>L means CCW for math angle, check convention)
+        //                                                                                     // If using "setTarget" theta, R>L is a left turn (positive W)
 
         // Get desired angular velocity from Stanley controller
-        float w_ref_stanley_radps = StanContr.output(); 
+        float w_ref_stanley_radps = StanContr.output();
 
         float v_effort = VContr.output(targetPose.v, POSE.v); // targetPose.v in mm/s
         float w_effort = WContr.output(targetPose.w, POSE.w); // targetPose.w (from Stanley) in rad/s
@@ -1218,34 +1322,39 @@ int main()
         duty_L_percent = std::max(-100.0f, std::min(100.0f, duty_L_percent));
         duty_R_percent = std::max(-100.0f, std::min(100.0f, duty_R_percent));
 
+        // sleep_ms(200); // Small delay to allow other tasks to run
+        continue;
+
         MotorL.setPWM(duty_L_percent);
         MotorR.setPWM(duty_R_percent);
 
         // 6. UPDATE STATE (Check if target is reached)
-       if (!targetReached) {
+        if (!targetReached)
+        {
             targetReached = checkTargetReached();
-            if (targetReached) {
+            if (targetReached)
+            {
                 Command next_cmd = commandQueue.pop();
                 setTarget(next_cmd);
                 printf("Next command: %s, value: %.1f\n", next_cmd.action.c_str(), next_cmd.value);
 
-                 // currentMovement = IDLE; // Optional: transition to IDLE
+                // currentMovement = IDLE; // Optional: transition to IDLE
             }
         }
 
         // --- Logging ---
-        if (loop_count % 5 == 0) { 
-             printf("T:%.2fs|POSE(mm,rad,v,w):%.0f,%.0f,%.2f|%.0f,%.2f|TGT:%.0f,%.0f,%.2f|%.0f,%.2f|R:%d|Mv:%d|StW:%.2f|Duty:%.0f,%.0f\n",
-               loop_time_now_us/1e6f, POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w,
-               targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w,
-               targetReached, static_cast<int>(currentMovement), w_ref_stanley_radps, duty_L_percent, duty_R_percent);
-             fflush(stdout);
+        if (loop_count % 5 == 0)
+        {
+            /*printf("T:%.2fs|POSE(mm,rad,v,w):%.0f,%.0f,%.2f|%.0f,%.2f|TGT:%.0f,%.0f,%.2f|%.0f,%.2f|R:%d|Mv:%d|StW:%.2f|Duty:%.0f,%.0f\n",
+              loop_time_now_us/1e6f, POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w,
+              targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w,
+              targetReached, static_cast<int>(currentMovement), w_ref_stanley_radps, duty_L_percent, duty_R_percent);
+            fflush(stdout);*/
         }
-        // sleep_ms(5);
+        sleep_ms(1);
     }
 
     return 0;
-
 }
 
 /*
@@ -1287,7 +1396,7 @@ int main()
     // printf("%f %f %f %f %f %f\n", vout1, vout2, vout3, wout1, wout2, wout3);
     // std::vector<Command> commands = stateMachineSimple("FLFLS");
 
-   
+
 
     while (true)
     {

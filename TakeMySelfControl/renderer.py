@@ -337,7 +337,7 @@ def update_tof_sensor_data_ray_marching(
 
     # Angle offsets for FRONT, LEFT, RIGHT, FRONT_LEFT_45, FRONT_RIGHT_45
     MAX_SENSOR_RANGES = np.array([255.0 / SCALE] * 5)  # Same range for all sensors
-    MAX_SENSOR_RANGES[0] = 5 * 255.0 / SCALE  # Front sensor has a longer range
+    MAX_SENSOR_RANGES[0] = 10 * 255.0 / SCALE  # Front sensor has a longer range
 
     for i in range(5): # For each of the 5 ToF sensors
         angle = rot + ANGLE_OFFSETS_TOF[i]
@@ -577,8 +577,8 @@ class Mouse(Body):
         # Convert to m/s and rad/s
         circ = 2 * math.pi * wr
 
-        self.left_pos += abs(self.left_rpm * circ / 60 * dt / SCALE)
-        self.right_pos += abs(self.right_rpm * circ / 60 * dt / SCALE)
+        self.left_pos += self.left_rpm * circ / 60 * dt / SCALE
+        self.right_pos += self.right_rpm * circ / 60 * dt / SCALE
 
         # print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}, left pos: {self.left_pos}, right pos: {self.right_pos} dt: {dt}")
 
