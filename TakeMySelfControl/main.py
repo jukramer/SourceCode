@@ -346,6 +346,22 @@ class TakeMySelfControl(QMainWindow):
                         tof_reading, tof_valid = self.pg_renderer.mouse.get_tof_reading(sensor)
                         write(f"{int(tof_reading)} {'t' if tof_valid else 'f'}\n")
                         return
+                    elif command == "setWall":
+                        if len(parts) < 5:
+                            output_buffer.append(f">>> Error parsing setWall command: {line.strip()}\n")
+                            return
+                        
+                        try:
+                            x = int(parts[2])
+                            y = int(parts[3])
+                            direction = int(parts[4])
+                            if direction not in [0, 1, 2, 3]:
+                                raise ValueError("Invalid direction")
+                        except ValueError as e:
+                            output_buffer.append(f">>> Invalid wall data: {e}\n")
+                            return
+                        self.pg_renderer.set_wall_seen(x, y, direction)
+                        return
                     elif command == "readIMU":
                         AX = 0.0
                         AY = 0.0

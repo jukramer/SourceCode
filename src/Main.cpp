@@ -21,14 +21,12 @@
 
 // Maze and Robot Dimensions (all in millimeters or radians)
 #define CELL_WIDTH 180.0f                   // mm
-#define V_MAX 250.0f                        // mm/s (Reduced V_MAX for more stable testing initially)
+#define V_MAX 500.0f                        // mm/s (Reduced V_MAX for more stable testing initially)
 #define TURN_RADIUS (CELL_WIDTH / 2.0f)     // mm
 #define W_MAX_NOMINAL (V_MAX / TURN_RADIUS) // Nominal angular velocity for turns (rad/s)
 
 #define SENSOR_NOISE_STDDEV 0.1f
 const float SENSOR_NOISE_VAR = SENSOR_NOISE_STDDEV * SENSOR_NOISE_STDDEV;
-
-#define EPSILON 1e-6f
 
 constexpr float DEFAULT_MAX_SENSOR_RANGE_MM = 255.0f;
 constexpr float FRONT_MAX_SENSOR_RANGE_MM = 10.0f * 255.0f; // Front sensor has longer range
@@ -39,60 +37,6 @@ constexpr float LOCAL_TOF_BASE_OFFSET_X_MM = 65.0f; // Offset along robot's loca
 constexpr float LOCAL_TOF_RADIAL_OFFSET_MM = 25.0f; // Additional radial offset for each sensor
 
 constexpr float WALL_THICKNESS_MM = 12.0f; // Wall thickness in mm
-
-struct Pose
-{
-    float x;     // mm
-    float y;     // mm
-    float theta; // radians, [-PI, PI), 0 along +X, PI/2 along +Y (CCW positive)
-    float v;     // linear velocity, mm/s
-    float w;     // angular velocity, rad/s (CCW positive)
-
-    Pose(float _x = 0.f, float _y = 0.f, float _theta = 0.f, float _v = 0.f, float _w = 0.f)
-        : x(_x), y(_y), theta(_theta), v(_v), w(_w) {}
-};
-
-struct Vec2f
-{
-    float x, y;
-
-    Vec2f(float x_ = 0.0f, float y_ = 0.0f) : x(x_), y(y_) {}
-
-    float norm() const
-    {
-        return sqrtf(x * x + y * y);
-    }
-
-    Vec2f normalized() const
-    {
-        float n = norm();
-        if (n < EPSILON)
-        {
-            return Vec2f(0.0f, 0.0f);
-        }
-        return Vec2f(x / n, y / n);
-    }
-
-    Vec2f operator+(const Vec2f &other) const
-    {
-        return Vec2f(x + other.x, y + other.y);
-    }
-
-    Vec2f operator-(const Vec2f &other) const
-    {
-        return Vec2f(x - other.x, y - other.y);
-    }
-
-    Vec2f operator*(float scalar) const
-    {
-        return Vec2f(x * scalar, y * scalar);
-    }
-
-    friend Vec2f operator*(float scalar, const Vec2f &vec)
-    {
-        return vec * scalar;
-    }
-};
 
 struct Particle
 {
@@ -490,13 +434,13 @@ Direction theta_to_direction()
         theta += 2.0f * PI;
 
     if (theta > -PI / 4 && theta <= PI / 4)
-        return Direction::EAST; // +X
+        return Direction::RIGHT; // +X
     else if (theta > PI / 4 && theta <= 3 * PI / 4)
-        return Direction::NORTH; // +Y
+        return Direction::TOP; // +Y
     else if (theta <= -PI / 4 && theta > -3 * PI / 4)
-        return Direction::SOUTH; // -Y
+        return Direction::BOTTOM; // -Y
     else
-        return Direction::WEST; // -X
+        return Direction::LEFT; // -X
 }
 
 void setTarget(Command command)
@@ -507,169 +451,63 @@ void setTarget(Command command)
     if (command.action == "FWD")
     {
         currentMovement = FWD;
-        targetPose.v = V_MAX; // Target speed in mm/s
-        targetPose.w = 0.0f;  // Nominal angular velocity for FWD is 0
 
-        // Current orientation of the robot (rad)
-        targetPose.theta = POSE.theta; // Maintain current orientation for FWD path
-
-        int cells_forward = (int)command.value;
         Direction dir = theta_to_direction();
+        printf("FWD command: %s, value: %.2f, dir: %d\n", command.action.c_str(), command.value, dir);
+        int dir_index = static_cast<int>(dir);
 
-        // Calculate the absolute coordinates of the *center* of the current cell
-        float current_cell_center_x = CELL_X * CELL_WIDTH + CELL_WIDTH / 2.0f;
-        float current_cell_center_y = CELL_Y * CELL_WIDTH + CELL_WIDTH / 2.0f;
+        int cells_forward = static_cast<int>(command.value);
 
-        // Calculate the distance from the robot's current POSE to the center of its current cell
-        float dist_from_pose_to_current_cell_center_x = current_cell_center_x - POSE.x;
-        float dist_from_pose_to_current_cell_center_y = current_cell_center_y - POSE.y;
+        int target_cell_x = CELL_X + OFFSET_LOCATIONS[dir_index].x * cells_forward;
+        int target_cell_y = CELL_Y - OFFSET_LOCATIONS[dir_index].y * cells_forward;
 
-        // Calculate the distance to the wall of the *current* cell
-        float dist_to_current_cell_wall = 0.0f;
+        targetPose.theta = POSE.theta;
+        targetPose.v = V_MAX;
+        targetPose.w = 0.0f;
 
-        if (dir == Direction::EAST) // Moving +X
-        {
-            // Distance from current POSE.x to the right wall of the current cell
-            dist_to_current_cell_wall = (CELL_X + 1) * CELL_WIDTH - POSE.x;
+        // Calculate wall-aligned stop point
+        targetPose.x = target_cell_x * CELL_WIDTH + (dir == Direction::LEFT ? CELL_WIDTH : 0);
+        targetPose.y = target_cell_y * CELL_WIDTH + (dir == Direction::BOTTOM ? CELL_WIDTH : 0);
+
+        // Compensate for sensor offset
+        if (dir == Direction::RIGHT) {
+            //targetPose.x += LOCAL_TOF_BASE_OFFSET_X_MM;
+            targetPose.y += CELL_WIDTH / 2.0f; // Center in cell
         }
-        else if (dir == Direction::NORTH) // Moving +Y
-        {
-            // Distance from current POSE.y to the top wall of the current cell
-            dist_to_current_cell_wall = (CELL_Y + 1) * CELL_WIDTH - POSE.y;
+        if (dir == Direction::LEFT) {
+            //targetPose.x -= LOCAL_TOF_BASE_OFFSET_X_MM;
+            targetPose.y += CELL_WIDTH / 2.0f; // Center in cell
         }
-        else if (dir == Direction::SOUTH) // Moving -Y
-        {
-            // Distance from current POSE.y to the bottom wall of the current cell
-            dist_to_current_cell_wall = POSE.y - CELL_Y * CELL_WIDTH;
+        if (dir == Direction::TOP) {
+            targetPose.x += CELL_WIDTH / 2.0f; // Center in cell
+            //targetPose.y += LOCAL_TOF_BASE_OFFSET_X_MM / 2;
         }
-        else if (dir == Direction::WEST) // Moving -X
-        {
-            // Distance from current POSE.x to the left wall of the current cell
-            dist_to_current_cell_wall = POSE.x - CELL_X * CELL_WIDTH;
+        if (dir == Direction::BOTTOM) {
+            targetPose.x += CELL_WIDTH / 2.0f; // Center in cell
+            //targetPose.y -= LOCAL_TOF_BASE_OFFSET_X_MM;
         }
-
-        // Total distance to travel to stop *before* the target cell
-        // This includes:
-        // 1. Distance to the first wall (wall of current cell)
-        // 2. (cells_forward - 1) full cell widths (if moving more than 1 cell)
-        // 3. Subtract a small epsilon or robot radius if necessary to stop *at* the wall, not just before it.
-        //    For "just before entering the new cell", we assume we are at the edge of the previous cell.
-        float total_distance_to_travel = dist_to_current_cell_wall;
-
-        // Add the distance for the additional cells (excluding the first partial cell)
-        if (cells_forward > 1)
-        {
-            total_distance_to_travel += (cells_forward - 1) * CELL_WIDTH;
-        }
-
-        // Adjust targetPose based on total_distance_to_travel and current orientation
-        // Note: The problem statement wants to stop *before* the cell enter.
-        // This means the target should be at the wall that defines the boundary
-        // of the last cell we are traversing *through*.
-        // If cells_forward = 1, we stop at the first wall.
-        // If cells_forward = 2, we stop at the wall after the first cell.
-        //
-        // Let's re-think the total_distance_to_travel to explicitly target the wall.
-
-        float target_x_abs, target_y_abs; // Absolute target coordinates (not relative to POSE)
-
-        if (dir == Direction::EAST) // +X
-        {
-            // Target is the right wall of the (CELL_X + cells_forward - 1) cell
-            target_x_abs = (CELL_X + cells_forward) * CELL_WIDTH;
-            target_y_abs = POSE.y; // Y remains constant for FWD
-        }
-        else if (dir == Direction::NORTH) // +Y
-        {
-            // Target is the top wall of the (CELL_Y + cells_forward - 1) cell
-            target_x_abs = POSE.x; // X remains constant for FWD
-            target_y_abs = (CELL_Y + cells_forward) * CELL_WIDTH;
-        }
-        else if (dir == Direction::SOUTH) // -Y
-        {
-            // Target is the bottom wall of the (CELL_Y - cells_forward) cell
-            target_x_abs = POSE.x;
-            target_y_abs = (CELL_Y - cells_forward) * CELL_WIDTH;
-        }
-        else if (dir == Direction::WEST) // -X
-        {
-            // Target is the left wall of the (CELL_X - cells_forward) cell
-            target_x_abs = (CELL_X - cells_forward) * CELL_WIDTH;
-            target_y_abs = POSE.y;
-        }
-
-        targetPose.x = target_x_abs;
-        targetPose.y = target_y_abs;
-
-        // IMPORTANT: The above calculation assumes that CELL_X, CELL_Y represent the
-        // bottom-left corner of the cell. If they represent the center, the logic changes.
-        // Given your current calculation of CELL_X * CELL_WIDTH, it suggests CELL_X/Y
-        // might be indices, and CELL_WIDTH is the size of each cell.
-        // Let's re-verify the coordinate system.
-
-        // Assuming CELL_X, CELL_Y are integer indices of the current cell,
-        // and the origin (0,0) is at the bottom-left of the entire grid.
-        // And CELL_WIDTH is the side length of a square cell.
-
-        // The current POSE.x and POSE.y are the robot's actual coordinates.
-        // CELL_X * CELL_WIDTH is the left edge of the current cell.
-        // (CELL_X + 1) * CELL_WIDTH is the right edge of the current cell.
-        // CELL_Y * CELL_WIDTH is the bottom edge of the current cell.
-        // (CELL_Y + 1) * CELL_WIDTH is the top edge of the current cell.
-
-        // Let's refine the target based on this assumption:
-
-        float target_x_wall, target_y_wall;
-
-        if (dir == Direction::EAST) // Moving +X
-        {
-            // The robot should stop at the left wall of the (CELL_X + cells_forward) cell.
-            // This is equivalent to the right wall of the (CELL_X + cells_forward - 1) cell.
-            target_x_wall = (CELL_X + cells_forward) * CELL_WIDTH + LOCAL_TOF_BASE_OFFSET_X_MM;
-            target_y_wall = POSE.y;
-        }
-        else if (dir == Direction::NORTH) // Moving +Y
-        {
-            // Stop at the bottom wall of the (CELL_Y + cells_forward) cell.
-            target_x_wall = POSE.x;
-            target_y_wall = (CELL_Y + cells_forward) * CELL_WIDTH + LOCAL_TOF_BASE_OFFSET_X_MM;
-        }
-        else if (dir == Direction::SOUTH) // Moving -Y
-        {
-            // Stop at the top wall of the (CELL_Y - cells_forward) cell.
-            target_x_wall = POSE.x;
-            target_y_wall = (CELL_Y - cells_forward + 1) * CELL_WIDTH - LOCAL_TOF_BASE_OFFSET_X_MM; // +1 because we are moving "backwards" to the top wall of the target cell.
-        }
-        else if (dir == Direction::WEST) // Moving -X
-        {
-            // Stop at the right wall of the (CELL_X - cells_forward) cell.
-            target_x_wall = (CELL_X - cells_forward + 1) * CELL_WIDTH - LOCAL_TOF_BASE_OFFSET_X_MM; // +1 because we are moving "backwards" to the right wall of the target cell.
-            target_y_wall = POSE.y;
-        }
-
-        targetPose.x = target_x_wall;
-        targetPose.y = target_y_wall;
     }
     else if (command.action == "TRN")
     {
-        targetPose.v = V_MAX * 0.5f; // Slower speed for turns (mm/s)
-
         float turn_angle_rad = command.value; // radians, positive for left (CCW)
         if (turn_angle_rad > 0)
             currentMovement = TURN_L;
         else
             currentMovement = TURN_R;
 
-        targetPose.theta = normalize_angle_pi_pi(POSE.theta + turn_angle_rad); // New target orientation
+        currentMovement = (turn_angle_rad > 0) ? TURN_L : TURN_R;
 
-        // Nominal angular speed for turn (rad/s)
-        float nominal_turn_w = (turn_angle_rad > 0 ? W_MAX_NOMINAL : -W_MAX_NOMINAL) * 0.75f; // Use 75% of max nominal for stability
-        targetPose.w = nominal_turn_w;
+        targetPose.theta = normalize_angle_pi_pi(POSE.theta + turn_angle_rad);
+        targetPose.v = V_MAX;
+        targetPose.w = (turn_angle_rad > 0 ? W_MAX_NOMINAL : -W_MAX_NOMINAL) * 0.75f;
 
-        // For turns, target X,Y is generally the current location if it's an in-place turn.
-        // Stanley controller's turn logic uses prevTargetPose to define the arc.
-        targetPose.x = POSE.x;
-        targetPose.y = POSE.y;
+        // Center of current cell, nudged by half a cell in turn direction
+        Direction dir = theta_to_direction();
+        int dir_index = static_cast<int>(dir);
+
+        float offset = CELL_WIDTH / 2.0f;
+        targetPose.x = CELL_X * CELL_WIDTH + CELL_WIDTH / 2.0f + OFFSET_VECTORS[dir_index].x * offset;
+        targetPose.y = CELL_Y * CELL_WIDTH + CELL_WIDTH / 2.0f + OFFSET_VECTORS[dir_index].y * offset;
     }
     else if (command.action == "STOP")
     {
@@ -1226,13 +1064,13 @@ void motion_update(float dx, float dy, float drot)
             {
                 Direction dir;
                 if (cell_x > old_cell_x)
-                    dir = Direction::WEST;
+                    dir = Direction::LEFT;
                 else if (cell_x < old_cell_x)
-                    dir = Direction::EAST;
+                    dir = Direction::RIGHT;
                 else if (cell_y > old_cell_y)
-                    dir = Direction::NORTH;
+                    dir = Direction::TOP;
                 else if (cell_y < old_cell_y)
-                    dir = Direction::SOUTH;
+                    dir = Direction::BOTTOM;
 
                 Cell &new_cell = MAZE_MATRIX[cell_y][cell_x];
                 if (new_cell.walls & (1 << (int)dir))
@@ -1331,37 +1169,43 @@ bool checkTargetReached()
 #define TOF_SIDE_LEFT_IDX ((int)TOF_Direction::LEFT)
 #define TOF_SIDE_RIGHT_IDX ((int)TOF_Direction::RIGHT)
 
-#define WALL_DIST_THRESHOLD_MM 100.0f
-#define SIDE_WALL_CLEAR_MM 150.0f
-
-Command decide_next_action_tof_based()
+bool front_wall_detected()
 {
-    bool wall_F = MM_VALID[TOF_FRONT_IDX] && MM[TOF_FRONT_IDX] < WALL_DIST_THRESHOLD_MM;
-
-    bool passage_L = MM_VALID[TOF_SIDE_LEFT_IDX] && MM[TOF_SIDE_LEFT_IDX] > SIDE_WALL_CLEAR_MM;
-    bool passage_R = MM_VALID[TOF_SIDE_RIGHT_IDX] && MM[TOF_SIDE_RIGHT_IDX] > SIDE_WALL_CLEAR_MM;
-
-    // Fallback using diagonal if side sensors are not good
-    if (!MM_VALID[TOF_SIDE_LEFT_IDX])
-        passage_L = MM_VALID[TOF_LEFT_DIAG_IDX] && MM[TOF_LEFT_DIAG_IDX] > WALL_DIST_THRESHOLD_MM * 1.2f;
-    if (!MM_VALID[TOF_SIDE_RIGHT_IDX])
-        passage_R = MM_VALID[TOF_RIGHT_DIAG_IDX] && MM[TOF_RIGHT_DIAG_IDX] > WALL_DIST_THRESHOLD_MM * 1.2f;
-
-    if (!wall_F)
+    if (MM_VALID[TOF_FRONT_IDX] && MM[TOF_FRONT_IDX] < (1.5 * CELL_SIZE))
     {
-        return {"FWD", 1.0f}; // Move 1 cell forward
-    }
-    else if (passage_R)
-    {
-        return {"TRN", -PI / 2.0f}; // Turn Right (approx -90 deg)
-    }
-    else if (passage_L)
-    {
-        return {"TRN", PI / 2.0f}; // Turn Left (approx +90 deg)
+        printf("Front wall detected at %.1fmm\n", MM[TOF_FRONT_IDX]);
+        return true;
     }
     else
     {
-        return {"TRN", PI / 2.0f}; // Default to left turn if stuck
+        printf("No front wall detected.\n");
+        return false;
+    }
+}
+
+bool wall_left() {
+    if (MM_VALID[TOF_SIDE_LEFT_IDX] && MM[TOF_SIDE_LEFT_IDX] < (1.5 * 1.41 * CELL_SIZE_MM / 2))
+    {
+        printf("Left wall detected at %.1fmm\n", MM[TOF_SIDE_LEFT_IDX]);
+        return true;
+    }
+    else
+    {
+        printf("No left wall detected.\n");
+        return false;
+    }
+}
+
+bool wall_right() {
+    if (MM_VALID[TOF_SIDE_RIGHT_IDX] && MM[TOF_SIDE_RIGHT_IDX] < (1.5 * 1.41 * CELL_SIZE_MM / 2))
+    {
+        printf("Right wall detected at %.1fmm\n", MM[TOF_SIDE_RIGHT_IDX]);
+        return true;
+    }
+    else
+    {
+        printf("No right wall detected.\n");
+        return false;
     }
 }
 
@@ -1378,19 +1222,19 @@ int main()
             MOVE_MATRIX[r][c] = 255;
             if (MAZE_MATRIX[r][c].north)
             {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::NORTH);
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::TOP);
             }
             if (MAZE_MATRIX[r][c].south)
             {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::SOUTH);
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::BOTTOM);
             }
             if (MAZE_MATRIX[r][c].west)
             {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::WEST);
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::LEFT);
             }
             if (MAZE_MATRIX[r][c].east)
             {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::EAST);
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::RIGHT);
             }
         }
     }
@@ -1408,6 +1252,7 @@ int main()
 
 
     while (true)
+    /*while (true)
     {
         if (stdio_usb_connected())
         {
@@ -1422,11 +1267,14 @@ int main()
             MotorR.setPWM(0);
             MotorL.setPWM(0);
         }
-    }
+    }*/
 
-    Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -90}, Command{"FWD", 2}, Command{"STOP", 0}};
+    //parse_maze_string(MAZE_ASCII_ART);
 
-    
+    print_maze();
+
+    //Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -PI/2}, Command{"FWD", 2}, Command{"STOP", 0}};
+    Queue commandQueue = {Command{"FWD", 1},  Command{"STOP", 0}};
 
     POSE.x = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
     POSE.y = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
@@ -1502,7 +1350,7 @@ int main()
         CELL_X = (int)(POSE.x / CELL_SIZE_MM);
         CELL_Y = 15 - (int)(POSE.y / CELL_SIZE_MM);
 
-        printf("Estimated pose: x=%.2fmm, y=%.2fmm, th=%.1fdeg, cell=(%d,%d)\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI, CELL_X, CELL_Y);
+        // printf("Estimated pose: x=%.2fmm, y=%.2fmm, th=%.1fdeg, cell=(%d,%d)\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI, CELL_X, CELL_Y);
 
         printf(">>> vizPARTICLES ");
         for (int i = 0; i < NUM_PARTICLES; i += 50)
@@ -1571,14 +1419,14 @@ int main()
         // --- Logging ---
         if (loop_count % 5 == 0)
         {
-            /*printf("T:%.2fs|POSE(mm,rad,v,w):%.0f,%.0f,%.2f|%.0f,%.2f|TGT:%.0f,%.0f,%.2f|%.0f,%.2f|R:%d|Mv:%d|StW:%.2f|Duty:%.0f,%.0f\n",
-              loop_time_now_us/1e6f, POSE.x, POSE.y, POSE.theta, POSE.v, POSE.w,
-              targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w,
-              targetReached, static_cast<int>(currentMovement), w_ref_stanley_radps, duty_L_percent, duty_R_percent);
-            fflush(stdout);*/
-        
-        // sleep_ms(1);
-    
+            printf("Target Pose: x=%.2fmm, y=%.2fmm, th=%.1fdeg, v=%.2fmm/s, w=%.2frad/s\n",
+                   targetPose.x, targetPose.y, targetPose.theta * 180.0f / (float)PI,
+                   targetPose.v, targetPose.w);
+            printf("Target Pose / CELL_WIDTH: (%f, %f)\n", (float)(targetPose.x / CELL_SIZE_MM), 15 - (float)(targetPose.y / CELL_SIZE_MM));
+
+        }
+        sleep_ms(1);
+    }
 
     return 0;
 } 

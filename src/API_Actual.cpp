@@ -18,7 +18,7 @@
 
 // Motor Constants/Variables
 #define TICKS_PER_REV 7.0
-#define GEAR_RATIO 30.0
+#define GEAR_RATIO 25.0
 
 volatile int64_t totalTicksL = 0;
 volatile int64_t totalTicksR = 0;
@@ -42,6 +42,9 @@ void c1_callback(uint gpio, uint32_t events)
         int encoded = (MSB << 1) |LSB;
         int sum = (lastEncodedL << 2) | encoded;
 
+        printf("c1_callback: Encoded: %d, Last Encoded: %d, Sum: %d, MSB: %d, LSB: %d\n", 
+               encoded, lastEncodedL, sum, MSB, LSB);
+
         if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) totalTicksL -= 1;
         if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) totalTicksL += 1;
 
@@ -58,6 +61,9 @@ void c2_callback(uint gpio, uint32_t events)
 
         int encoded = (MSB << 1) |LSB;
         int sum = (lastEncodedR << 2) | encoded;
+
+        printf("c2_callback: Encoded: %d, Last Encoded: %d, Sum: %d, MSB: %d, LSB: %d\n", 
+               encoded, lastEncodedR, sum, MSB, LSB);
 
         if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) totalTicksR -= 1;
         if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) totalTicksR += 1;
@@ -133,6 +139,11 @@ void Motor::setPWM(float pwm)
         printf("Invalid PWM calculated...\n");
     }
     analogWrite(pinPWM, actualPWM);
+}
+
+void Motor::setPWMRaw(int pwm)
+{
+    
 }
 
 void Motor::update()
@@ -528,4 +539,8 @@ void global_read_imu()
         imu_sample_count = 0;
         t_start = t2;
     }
+}
+
+void setWall_UI(int x, int y, Direction direction)
+{
 }

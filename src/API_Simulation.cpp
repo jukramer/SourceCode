@@ -90,3 +90,9 @@ void global_read_imu()
     AY = ay;
     GYRO_Z = gyro_z;
 }
+
+void setWall_UI(int x, int y, Direction direction)
+{
+    printf(">>> setWall %d %d %d\n", x, y, static_cast<int>(direction));
+    fflush(stdout);
+}

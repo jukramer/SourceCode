@@ -736,9 +736,11 @@ class PgRenderer:
                     cell.wall_left = True
                 if x == CELL_COUNT - 1:
                     cell.wall_right = True
-        self.refresh_walls()
 
+        self.walls_seen_aabbs = []
         self.particles = []
+
+        self.refresh_walls()
 
 
     # def toggle_wall(self, x, y, direction, drag_id=None):
@@ -787,6 +789,35 @@ class PgRenderer:
     #                 self.toggle_wall(x, y, Direction.TOP, drag_id)
     #         self.refresh_walls()
 
+    def add_wall(self, rect):
+        half_width = rect.width // 2
+        half_height = rect.height // 2
+
+        center = np.array([rect.left + half_width, rect.top + half_height])
+        wall = Body(shape=make_rect(half_width, half_height), density=1000, static=True)
+        wall.pos = np.array(center)
+        wall.dirty_transform = True
+
+        ensure_transformed_shape(wall)
+        return wall
+        
+    def get_wall_rect(self, x, y, direction):
+        cx = x * CELL_SIZE + WALL_THICKNESS + WALL_THICKNESS // 2
+        cy = y * CELL_SIZE + WALL_THICKNESS + WALL_THICKNESS // 2
+
+        if direction == Direction.TOP:
+            return pg.Rect(cx, cy + CELL_SIZE - WALL_THICKNESS // 2, CELL_SIZE, WALL_THICKNESS)
+        if direction == Direction.RIGHT:
+            return pg.Rect(cx + CELL_SIZE - WALL_THICKNESS // 2, cy, WALL_THICKNESS, CELL_SIZE)
+        if direction == Direction.BOTTOM:
+            return pg.Rect(cx, cy - WALL_THICKNESS // 2, CELL_SIZE, WALL_THICKNESS)
+        if direction == Direction.LEFT:
+            return pg.Rect(cx - WALL_THICKNESS // 2, cy, WALL_THICKNESS, CELL_SIZE)
+
+    def set_wall_seen(self, x, y, direction):
+        wall = self.add_wall(self.get_wall_rect(x, y, direction))
+        self.walls_seen_aabbs.append(wall.transformed_shape.aabb)
+
     def set_particles(self, particles):
         self.particles = particles
 
@@ -800,39 +831,29 @@ class PgRenderer:
         if key < len(self.pressed_keys):
             self.pressed_keys[key] = False
 
+
     def refresh_walls(self):
-        def add_wall(rect):
-            half_width = rect.width // 2
-            half_height = rect.height // 2
-
-            center = np.array([rect.left + half_width, rect.top + half_height])
-            wall = Body(shape=make_rect(half_width, half_height), density=1000, static=True)
-            wall.pos = np.array(center)
-            wall.dirty_transform = True
-
-            ensure_transformed_shape(wall)
-
-            self.walls.append(wall)
-            self.walls_aabbs.append(wall.transformed_shape.aabb)
-    
-        self.walls = []
         self.walls_aabbs = []
-        
+        self.walls = []
+
         for y in range(CELL_COUNT):
             for x in range(CELL_COUNT):
                 cell = self.maze[y][x]
                 y = 15 - y
-                cx = x * CELL_SIZE + WALL_THICKNESS + WALL_THICKNESS // 2
-                cy = y * CELL_SIZE + WALL_THICKNESS + WALL_THICKNESS // 2
+
+                def add_wall(rect):
+                    wall = self.add_wall(rect)
+                    self.walls.append(wall)
+                    self.walls_aabbs.append(wall.transformed_shape.aabb)
 
                 if cell.wall_top:
-                    add_wall(pg.Rect(cx, cy + CELL_SIZE - WALL_THICKNESS // 2, CELL_SIZE, WALL_THICKNESS))
+                    add_wall(self.get_wall_rect(x, y, Direction.TOP))
                 if cell.wall_right:
-                    add_wall(pg.Rect(cx + CELL_SIZE - WALL_THICKNESS // 2, cy, WALL_THICKNESS, CELL_SIZE))
+                    add_wall(self.get_wall_rect(x, y, Direction.RIGHT))
                 if cell.wall_bottom:
-                    add_wall(pg.Rect(cx, cy - WALL_THICKNESS // 2, CELL_SIZE, WALL_THICKNESS))
+                    add_wall(self.get_wall_rect(x, y, Direction.BOTTOM))
                 if cell.wall_left:
-                    add_wall(pg.Rect(cx - WALL_THICKNESS // 2, cy, WALL_THICKNESS, CELL_SIZE))
+                    add_wall(self.get_wall_rect(x, y, Direction.LEFT))
                 
     def update(self, dt):
         self.mouse.handle_input(self.pressed_keys)
@@ -843,10 +864,13 @@ class PgRenderer:
 
         self.mouse.draw(self.surface)
         
-        for wall in self.walls:
-            aabb = wall.transformed_shape.aabb
-            m = aabb[0] - aabb[1]
-            pg.draw.rect(self.surface, (240, 0, 0), pg.Rect(m[0], m[1], aabb[1][0] * 2, aabb[1][1] * 2), int(WALL_THICKNESS))
+        for wall in self.walls_aabbs:
+            m = wall[0] - wall[1]
+            pg.draw.rect(self.surface, (120, 0, 0), pg.Rect(m[0], m[1], wall[1][0] * 2, wall[1][1] * 2), int(WALL_THICKNESS))
+
+        for wall in self.walls_seen_aabbs:
+            m = wall[0] - wall[1]
+            pg.draw.rect(self.surface, (240, 0, 0), pg.Rect(m[0], m[1], wall[1][0] * 2, wall[1][1] * 2), int(WALL_THICKNESS))
 
         # Draw corners as filled circles 
         for y in range(CELL_COUNT + 1):

@@ -18,8 +18,6 @@ public:
     float RPM = 0;
     float DELTA_POS = 0;
 
-    float gearRatio;
-
     const volatile int64_t *totalTicks;
     int64_t prevTicks;
 
@@ -36,8 +34,9 @@ public:
     Motor(Motor_Choice choice);
 
     void setPWM(float PWM);
+    void setPWMRaw(int pwm);
+
     void update();
-    void updateSmooth();
 };
 
 enum class TOF_Direction
@@ -56,7 +55,6 @@ void global_init();
 void global_read_tofs();
 void global_read_imu();
 
-// This is only for simulation...
 void setWall_UI(int x, int y, Direction direction);
 
 extern "C" {
