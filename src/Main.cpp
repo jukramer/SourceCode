@@ -4,6 +4,7 @@
 #include <vector>
 #include <random>
 #include <time.h>
+#include "linalg.h"
 #include <math.h>
 
 #define PI 3.14159265358979323846f // Define PI constant
@@ -145,6 +146,7 @@ public:
         tPrev = time_us_64();
     }
 };
+
 
 class WController
 {
@@ -1032,7 +1034,7 @@ bool checkTargetReached() {
 
     if (currentMovement == FWD) {
         dist_thresh_mm = 20.0f; // 20 mm
-        
+
         // For FWD, primarily check distance. Angle is less critical once on path.
         return dist_sq_mm < (dist_thresh_mm * dist_thresh_mm);
     } else if (currentMovement == TURN_L || currentMovement == TURN_R) {

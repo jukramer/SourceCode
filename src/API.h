@@ -37,6 +37,7 @@ public:
 
     void setPWM(float PWM);
     void update();
+    void updateSmooth();
 };
 
 enum class TOF_Direction
