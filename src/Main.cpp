@@ -1171,9 +1171,9 @@ bool checkTargetReached()
 
 bool front_wall_detected()
 {
-    if (MM_VALID[TOF_FRONT_IDX] && MM[TOF_FRONT_IDX] < (1.5 * CELL_SIZE))
+    if (MM_VALID[TOF_FRONT_IDX] && MM[TOF_FRONT_IDX] < (1.5 * CELL_SIZE_MM))
     {
-        printf("Front wall detected at %.1fmm\n", MM[TOF_FRONT_IDX]);
+        printf("Front wall detected at %dmm\n", MM[TOF_FRONT_IDX]);
         return true;
     }
     else
@@ -1186,7 +1186,7 @@ bool front_wall_detected()
 bool wall_left() {
     if (MM_VALID[TOF_SIDE_LEFT_IDX] && MM[TOF_SIDE_LEFT_IDX] < (1.5 * 1.41 * CELL_SIZE_MM / 2))
     {
-        printf("Left wall detected at %.1fmm\n", MM[TOF_SIDE_LEFT_IDX]);
+        printf("Left wall detected at %dmm\n", MM[TOF_SIDE_LEFT_IDX]);
         return true;
     }
     else
@@ -1199,7 +1199,7 @@ bool wall_left() {
 bool wall_right() {
     if (MM_VALID[TOF_SIDE_RIGHT_IDX] && MM[TOF_SIDE_RIGHT_IDX] < (1.5 * 1.41 * CELL_SIZE_MM / 2))
     {
-        printf("Right wall detected at %.1fmm\n", MM[TOF_SIDE_RIGHT_IDX]);
+        printf("Right wall detected at %dmm\n", MM[TOF_SIDE_RIGHT_IDX]);
         return true;
     }
     else
@@ -1211,10 +1211,11 @@ bool wall_right() {
 
 int main()
 {
+    printf("In main!\n");
     global_init();
-
+    printf("Inited!\n");
     parse_maze_string(MAZE_ASCII_ART);
-
+    printf("Parsed!\n");
     for (int r = 0; r < MAZE_SIZE; ++r)
     {
         for (int c = 0; c < MAZE_SIZE; ++c)
@@ -1242,10 +1243,20 @@ int main()
     print_maze();
 
     floodFill();
-    std::string path = findFastestPath();
+
+    printf("Finding fastest path...\n");
+    Queue<Command> path = fastestPath();
+    printf("Fastest path found!\n");
+    Queue<Command> pathPrint = path;
+
+    printf("Attempting to print path...\n");
+    while (!pathPrint.empty()) {
+        Command command = pathPrint.pop();
+        printf("%s, %f\n", command.action.c_str(), command.value);
+    }
     
     while (true) {
-        printf("%s\n", path);
+        // printf("%s\n", path);flo
     }
 
     /*
@@ -1426,6 +1437,11 @@ int main()
 
         }
         sleep_ms(1);
+    }
+
+    if (STATE = STATE_FAST_RUN) {
+        floodFill();
+        commandQueue = fastestPath();
     }
 
     return 0;

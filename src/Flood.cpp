@@ -1,5 +1,9 @@
 #include "API.h"
 #include <tuple>
+#include <iostream>
+
+#define PI 3.14159265358979323846f // Define PI constant
+
 
 force_inline bool isUnvisited(int x, int y)
 {
@@ -69,7 +73,7 @@ void printMaze()
             else
                 printf(" ");
 
-            printf("%3d", (int) FLOOD_MATRIX[y][x]);
+            printf("%3d", (int)FLOOD_MATRIX[y][x]);
         }
 
         // Right wall of the last cell
@@ -91,7 +95,6 @@ void printMaze()
     printf(" \n");
 }
 
-
 void floodFill()
 {
     auto begin = time_us_64();
@@ -102,9 +105,12 @@ void floodFill()
     floodQueue.reset();
 
     // Set high value
-    for (int i; i<15; i++) {
-        for (int j; j<15; j++) {
-            if (!(i==7 || i==8 || j==7 || j==8)) {
+    for (int i; i < 15; i++)
+    {
+        for (int j; j < 15; j++)
+        {
+            if (!(i == 7 || i == 8 || j == 7 || j == 8))
+            {
                 FLOOD_MATRIX[j][i] = 255;
             }
         }
@@ -167,26 +173,29 @@ void floodFill()
     auto duration = (end - begin) / 1000.0f;
     printf("Flood fill completed in %.2f ms, processed %d cells.\n", duration, c);
 
-    printMaze();
+    // print_maze();
 }
 
-struct CellCoord {
+struct CellCoord
+{
     int C;
     int R;
 
-    CellCoord operator+(const CellCoord c2) const {
+    CellCoord operator+(const CellCoord c2) const
+    {
         CellCoord result;
         result.C = C + c2.C;
         result.R = R + c2.R;
-        
+
         return result;
     }
 
-    CellCoord operator-(const CellCoord c2) const {
+    CellCoord operator-(const CellCoord c2) const
+    {
         CellCoord result;
         result.C = C - c2.C;
         result.R = R - c2.R;
-        
+
         return result;
     }
 };
@@ -195,156 +204,31 @@ struct CellCoord {
 #include <algorithm>
 
 // Enum for mouse heading
-enum class Heading { NORTH, EAST, SOUTH, WEST };
+enum class Heading
+{
+    NORTH,
+    EAST,
+    SOUTH,
+    WEST
+};
 
 // Function to check if a cell is a goal cell
-bool isGoalCell(int x, int y) {
+bool isGoalCell(int x, int y)
+{
     return (x == 7 && y == 7) || (x == 8 && y == 7) ||
            (x == 7 && y == 8) || (x == 8 && y == 8);
 }
 
 // Function to find the fastest path from {0,15} to a goal cell
-std::string findFastestPath() {
-    std::string path; // Dynamic string for path commands
-
-    // Starting position and heading
-    int x = 0, y = 15; // Starting at {0,15} (FLOOD_MATRIX[15][0])
-    Heading heading = Heading::NORTH; // Assume initial heading is North
-
-    while (!isGoalCell(x, y)) {
-        // Define movements relative to current heading
-        int forwardX = x, forwardY = y, leftX = x, leftY = y, rightX = x, rightY = y;
-        char moveCommand = '\0';
-
-        // Determine coordinates of forward, left, and right cells based on heading
-        switch (heading) {
-            case Heading::NORTH:
-                forwardX = x; forwardY = y - 1; // Up
-                leftX = x - 1; leftY = y;       // West
-                rightX = x + 1; rightY = y;     // East
-                break;
-            case Heading::EAST:
-                forwardX = x + 1; forwardY = y; // Right
-                leftX = x; leftY = y - 1;       // North
-                rightX = x; rightY = y + 1;     // South
-                break;
-            case Heading::SOUTH:
-                forwardX = x; forwardY = y + 1; // Down
-                leftX = x + 1; leftY = y;       // East
-                rightX = x - 1; rightY = y;     // West
-                break;
-            case Heading::WEST:
-                forwardX = x - 1; forwardY = y; // Left
-                leftX = x; leftY = y + 1;       // South
-                rightX = x; rightY = y - 1;     // North
-                break;
-        }
-
-        // Evaluate floodfill values for forward, left, and right cells
-        int minValue = 999; // Large number for unreachable cells
-        int nextX = x, nextY = y;
-
-        // Check forward cell
-        if (forwardY >= 0 && forwardY < 16 && forwardX >= 0 && forwardX < 16 &&
-            FLOOD_MATRIX[forwardY][forwardX] < minValue) {
-            minValue = FLOOD_MATRIX[forwardY][forwardX];
-            nextX = forwardX;
-            nextY = forwardY;
-            moveCommand = 'F';
-        }
-
-        // Check left cell
-        if (leftY >= 0 && leftY < 16 && leftX >= 0 && leftX < 16 &&
-            FLOOD_MATRIX[leftY][leftX] < minValue) {
-            minValue = FLOOD_MATRIX[leftY][leftX];
-            nextX = leftX;
-            nextY = leftY;
-            moveCommand = 'L';
-        }
-
-        // Check right cell
-        if (rightY >= 0 && rightY < 16 && rightX >= 0 && rightX < 16 &&
-            FLOOD_MATRIX[rightY][rightX] < minValue) {
-            minValue = FLOOD_MATRIX[rightY][rightX];
-            nextX = rightX;
-            nextY = rightY;
-            moveCommand = 'R';
-        }
-
-        // If no valid move is found, stop (shouldn't happen with correct FLOOD_MATRIX)
-        if (moveCommand == '\0') {
-            path += 'S';
-            break;
-        }
-
-        // Update heading based on the move
-        if (moveCommand == 'L') {
-            switch (heading) {
-                case Heading::NORTH: heading = Heading::WEST; break;
-                case Heading::EAST: heading = Heading::NORTH; break;
-                case Heading::SOUTH: heading = Heading::EAST; break;
-                case Heading::WEST: heading = Heading::SOUTH; break;
-            }
-        } else if (moveCommand == 'R') {
-            switch (heading) {
-                case Heading::NORTH: heading = Heading::EAST; break;
-                case Heading::EAST: heading = Heading::SOUTH; break;
-                case Heading::SOUTH: heading = Heading::WEST; break;
-                case Heading::WEST: heading = Heading::NORTH; break;
-            }
-        } // No heading change for 'F'
-
-        // Append the move command and update position
-        path += moveCommand;
-        x = nextX;
-        y = nextY;
-    }
-
-    // Append stop command when goal is reached
-    path += 'S';
-
-    return path;
-}
 
 
-
-// std::vector<CellCoord> getNeighbors(CellCoord coord) {
-//     std::vector<CellCoord> neighbors;
-
-//     CellCoord diff[4] = {{-1,0}, {0,1}, {1,0}, {0,-1}};
-
-//     for (CellCoord d : diff) {
-//         CellCoord neighbor = coord - d;
-//         if (!(neighbor.C < 0 || neighbor.C > 15 || neighbor.R < 0 || neighbor.R > 15)) {
-//             neighbors.push_back(neighbor)    ;    
-//         }
-//     }
-    
-//     return neighbors;
-// }
-
-// std::string fastestPath() {
-//     #define forward 100
-//     #define right 101
-//     #define left 102
-//     #define backward 103
-
-//     CellCoord cell = {0, 15};
-
-//     std::vector<CellCoord> neighbors = getNeighbors(cell);
-    
-// }
-
-
-std::string fastestPath()
-{
-    // TODO: encourage to take diagonals
-
+Queue<Command> fastestPath() {
     // Fastest path solely based on floodfill distance
-    std::string path = "";
+    Queue<Command> path;
 
     Location currentCell = {0, 15};
     Direction currentDir = Direction::TOP;
+    float n = 0;
     // Initial point
     for (int i = 0; i < 100; i++)
     {
@@ -358,8 +242,8 @@ std::string fastestPath()
             if (!(mask & (1 << i)))
                 continue;
 
-            int nx = currentCell.x + DIRECTIONS[i].x;
-            int ny = currentCell.y + DIRECTIONS[i].y;
+            int nx = currentCell.x + OFFSET_LOCATIONS[i].x;
+            int ny = currentCell.y + OFFSET_LOCATIONS[i].y;
 
             if (FLOOD_MATRIX[ny][nx] <= minFloodFill)
             {
@@ -370,36 +254,44 @@ std::string fastestPath()
             }
         }
 
-        std::cout << currentDir << " " << minFloodFillDir << std::endl;
+        // std::cout << currentDir << " " << minFloodFillDir << std::endl;
         // Append path depending on relative dir of next cell and mouse
         if (currentDir == minFloodFillDir)
         {
-            path += 'F';
-            std::cout << "Pushing F..." << std::endl;
+            n++;
+            // std::cout << "Pushing F..." << std::endl;
         }
         else if (minFloodFillDir - currentDir == -1 || minFloodFillDir - currentDir == 3)
         {
-            path += 'L';
-            std::cout << "Pushing L..." << std::endl;
+            if (n!=0) {
+                path.push(Command {"FWD", n});
+                n = 0;
+            }
+            path.push(Command {"TRN", PI/2.0});
+            // std::cout << "Pushing L..." << std::endl;
         }
         else if (minFloodFillDir - currentDir == 1 || minFloodFillDir - currentDir == -3)
         {
-            path += 'R';
-            std::cout << "Pushing R..." << std::endl;
+            if (n!=0) {
+                path.push(Command {"FWD", n});
+                n = 0;
+            }
+            path.push(Command {"TRN", -PI/2.0});
+            // std::cout << "Pushing R..." << std::endl;
         }
 
-        std::cout << currentCell.x << " " << currentCell.y << " --> " << x1 << " " << y1 << " " << FLOOD_MATRIX[y1][x1] << std::endl;
+        // std::cout << currentCell.x << " " << currentCell.y << " --> " << x1 << " " << y1 << " " << FLOOD_MATRIX[y1][x1] << std::endl;
 
         currentCell = {x1, y1};
         currentDir = minFloodFillDir;
-        std::cout << currentDir << " " << minFloodFillDir << std::endl;
+        // std::cout << currentDir << " " << minFloodFillDir << std::endl;
         if (FLOOD_MATRIX[y1][x1] == 0)
         {
-            std::cout << "Breaking" << std::endl;
+            // std::cout << "Breaking" << std::endl;
             break;
         }
     }
-    path += 'S';
+    path.push(Command {"STOP", 0.0});
 
     return path;
-} 
+}

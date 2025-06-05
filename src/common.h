@@ -22,7 +22,6 @@ using byte = uint8_t;
 #define STATE_MAP_EXPLORE_BACK 3
 #define STATE_FAST_RUN 5
 
-
 inline volatile byte STATE = STATE_IDLE; // Global state of the mouse
 
 enum Direction
@@ -34,17 +33,26 @@ enum Direction
     BLOCKED = 99
 };
 
-struct Point {
+struct Point
+{
     float x;
     float y;
 };
 
-struct Command {
+struct Command
+{
     std::string action; // "FWD", "TRN", "STOP"
     float value;        // cells for FWD, radians for TRN (positive for left)
 };
 
-enum MovementType { FWD, TURN_L, TURN_R, STOP_CMD, IDLE };
+enum MovementType
+{
+    FWD,
+    TURN_L,
+    TURN_R,
+    STOP_CMD,
+    IDLE
+};
 
 constexpr Direction OPPOSITE[4] = {BOTTOM, LEFT, TOP, RIGHT};
 constexpr Direction LEFT_FROM[4] = {LEFT, TOP, RIGHT, BOTTOM};
@@ -91,7 +99,6 @@ public:
     }
 };
 
-std::string findFastestPath();
 
 // Ring buffer queue for flood fill
 template <typename T>
@@ -106,10 +113,12 @@ struct Queue
     force_inline T pop() { return buffer[tail++ & 255]; }
 };
 
+Queue<Command> fastestPath();
+
 enum WallState
 {
-    EXIT = 0,    // a wall that has been seen and confirmed absent
-    WALL = 1,    // a wall that has been seen and confirmed present
+    EXIT = 0, // a wall that has been seen and confirmed absent
+    WALL = 1, // a wall that has been seen and confirmed present
 };
 
 struct StatePrediction
@@ -125,16 +134,15 @@ struct Cell
     {
         struct
         {
-            WallState north : 1;  // 1 bit for the north wall
-            WallState east : 1;   // 1 bit for the east wall
-            WallState south : 1;  // 1 bit for the south wall
-            WallState west : 1;   // 1 bit for the west wall
-            bool visited : 1;     // 1 bit for visited status
+            WallState north : 1; // 1 bit for the north wall
+            WallState east : 1;  // 1 bit for the east wall
+            WallState south : 1; // 1 bit for the south wall
+            WallState west : 1;  // 1 bit for the west wall
+            bool visited : 1;    // 1 bit for visited status
         };
         byte walls;
     };
 };
-
 
 struct Pose
 {
@@ -154,12 +162,12 @@ struct Vec2f
 
     constexpr Vec2f(float x_ = 0.0f, float y_ = 0.0f) : x(x_), y(y_) {}
 
-    constexpr float norm() const
+    float norm() const
     {
         return sqrtf(x * x + y * y);
     }
 
-    constexpr Vec2f normalized() const
+    Vec2f normalized() const
     {
         float n = norm();
         if (n < EPSILON)
