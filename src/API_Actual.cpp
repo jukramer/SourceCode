@@ -20,8 +20,11 @@
 #define TICKS_PER_REV 7.0
 #define GEAR_RATIO 30.0
 
-volatile uint totalTicksL = 0;
-volatile uint totalTicksR = 0;
+volatile int64_t totalTicksL = 0;
+volatile int64_t totalTicksR = 0;
+
+volatile int lastEncodedL = 0;
+volatile int lastEncodedR = 0;
 
 void analogWrite(uint gpio, uint level)
 {
@@ -33,7 +36,16 @@ void c1_callback(uint gpio, uint32_t events)
 {
     if (events & GPIO_IRQ_EDGE_RISE)
     {
-        totalTicksL += 1; // Or -- if in reverse
+        int MSB = gpio_get(mlencPin); 
+        int LSB = gpio_get(mlencPin2);
+
+        int encoded = (MSB << 1) |LSB;
+        int sum = (lastEncodedL << 2) | encoded;
+
+        if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) totalTicksL -= 1;
+        if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) totalTicksL += 1;
+
+        lastEncodedL = encoded;
     }
 }
 
@@ -41,7 +53,16 @@ void c2_callback(uint gpio, uint32_t events)
 {
     if (events & GPIO_IRQ_EDGE_RISE)
     {
-        totalTicksR += 1; // Or -- if in reverse
+        int MSB = gpio_get(mrencPin); 
+        int LSB = gpio_get(mrencPin2);
+
+        int encoded = (MSB << 1) |LSB;
+        int sum = (lastEncodedR << 2) | encoded;
+
+        if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) totalTicksR -= 1;
+        if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) totalTicksR += 1;
+
+        lastEncodedR = encoded;
     }
 }
 
@@ -52,8 +73,10 @@ Motor::Motor(Motor_Choice choice)
     int pinForward = choice == Motor_Choice::LEFT ? dirA1Pin : dirB1Pin;
     int pinBackward = choice == Motor_Choice::LEFT ? dirA2Pin : dirB2Pin;
     int pinPWM = choice == Motor_Choice::LEFT ? spdAPin : spdBPin;
-    int pinENC = choice == Motor_Choice::LEFT ? mrencPin : mlencPin;
-    const volatile uint *totalTicks = choice == Motor_Choice::LEFT ? &totalTicksL : &totalTicksR;
+    int pinENC = choice == Motor_Choice::LEFT ? mlencPin : mrencPin;
+    int pinENC2 = choice == Motor_Choice::LEFT ? mlencPin2 : mrencPin2;
+
+    const volatile int64_t *totalTicks = choice == Motor_Choice::LEFT ? &totalTicksL : &totalTicksR;
     gpio_irq_callback_t callback = choice == Motor_Choice::LEFT ? &c1_callback : &c2_callback;
 
     tPrev = time_us_64();
@@ -64,12 +87,15 @@ Motor::Motor(Motor_Choice choice)
     this->pinENC = pinENC;
 
     this->totalTicks = totalTicks;
-    this->prevTicksRPM = 0;
-    this->prevTicksPOS = 0;
+    this->prevTicks = *totalTicks;
 
     gpio_init(pinENC);
     gpio_set_dir(pinENC, GPIO_IN);
     gpio_pull_up(pinENC);
+
+    gpio_init(pinENC2);
+    gpio_set_dir(pinENC2, GPIO_IN);
+    gpio_pull_up(pinENC2);
 
     gpio_set_irq_enabled_with_callback(pinENC, GPIO_IRQ_EDGE_RISE, true, callback);
     irq_set_enabled(IO_IRQ_BANK0, true);
@@ -85,23 +111,18 @@ void Motor::setPWM(float pwm)
     int sign = 1;
     if (pwm < 0.0)
     {
-        DIR = BACKWARD;
         sign = -1; // To flip to positive later
-    }
-    else
-    {
-        DIR = FORWARD;
     }
 
     // Scale PWM from 0 to 100 to 45 to 255
-    int actualPWM = sign * (pwm * 210) / 100 + 45;
+    int actualPWM = sign * (pwm * 215) / 100 + 40;
 
-    if (DIR == FORWARD)
+    if (sign == 1)
     {
         gpio_put(pinForward, 1);
         gpio_put(pinBackward, 0);
     }
-    else if (DIR == BACKWARD)
+    else if (sign == -1)
     {
         gpio_put(pinForward, 0);
         gpio_put(pinBackward, 1);
@@ -118,9 +139,9 @@ void Motor::update()
 {
     uint64_t now = time_us_64();
 
-    double pulses = double(*totalTicks - prevTicksRPM);
-    printf("Pulses: %d, ticks: %d, prev ticks: %d ", pulses, *totalTicks, prevTicksRPM);
-    prevTicksRPM = *totalTicks;
+    float pulses = float(*totalTicks - prevTicks);
+    printf("Pulses: %d, ticks: %d, prev ticks: %d ", pulses, *totalTicks, prevTicks);
+    prevTicks = *totalTicks;
 
     float dt_us = (now - tPrev);
     printf("tNow: %lld tPrev: %lld dt: %f\n", now, tPrev, dt_us);
@@ -139,10 +160,7 @@ void Motor::update()
         this->RPM = 0.0f; // Avoid division by zero
     }
 
-    double pulses = double(*totalTicks - prevTicksPOS);
-    prevTicksPOS = *totalTicks;
-
-    double deltaPos = pulses / TICKS_PER_REV * 2 * M_PI * WHEEL_RADIUS;
+    float deltaPos = pulses / TICKS_PER_REV * 2 * M_PI * WHEEL_RADIUS_MM;
     this->DELTA_POS = deltaPos;
 }
 

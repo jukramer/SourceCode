@@ -30,14 +30,6 @@ void Motor::setPWM(float pwm)
     this->PWM = pwm;
 
     int sign = 1;
-    if (pwm < 0.0)
-    {
-        DIR = BACKWARD;
-    }
-    else
-    {
-        DIR = FORWARD;
-    }
     
     printf(">>> setPWM %s %f\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT", PWM);
     fflush(stdout);

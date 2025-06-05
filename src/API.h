@@ -16,12 +16,10 @@ public:
     float RPM = 0;
     float DELTA_POS = 0;
 
-    // This is changed when setPWM is called
-    int DIR = FORWARD;
+    float gearRatio;
 
-    const volatile uint *totalTicks;
-    uint prevTicksRPM;
-    uint prevTicksPOS;
+    const volatile int64_t *totalTicks;
+    int64_t prevTicks;
 
     int pinForward;
     int pinBackward;
