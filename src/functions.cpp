@@ -18,6 +18,7 @@
 #define DIAG_RR 7
 #define DIAG_RL 8
 #define DIAG_LL 9
+#define STOP 100
 
 
 //////////////// FUNCTIONS //////////////////////

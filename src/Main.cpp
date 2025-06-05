@@ -44,14 +44,6 @@ struct Pose
         : x(_x), y(_y), theta(_theta), v(_v), w(_w) {}
 };
 
-
-enum MovementType { FWD, TURN_L, TURN_R, STOP_CMD, IDLE };
-
-struct Command {
-    std::string action; // "FWD", "TRN", "STOP"
-    float value;        // cells for FWD, radians for TRN (positive for left)
-};
-
 struct Vec2f
 {
     float x, y;
@@ -228,7 +220,7 @@ public:
             // Let's use the general line distance formula for clarity, assuming targetPose.x/y is a point on the desired path.
             // The line is (targetPose.x, targetPose.y) going in direction targetPose.theta.
             // Error relative to path line x*sin(th_p) - y*cos(th_p) - (x_p*sin(th_p) - y_p*cos(th_p)) = 0
-             e_ct_mm = (POSE.x - targetPose.x) * sinf(targetPose.theta) - (POSE.y - targetPose.y) * cosf(targetPose.theta);
+            e_ct_mm = (POSE.x - targetPose.x) * sinf(targetPose.theta) - (POSE.y - targetPose.y) * cosf(targetPose.theta);
 
 
             // Heading error psi (radians)
@@ -436,6 +428,8 @@ void setTarget(Command command) {
         // Stanley controller's turn logic uses prevTargetPose to define the arc.
         targetPose.x = POSE.x;
         targetPose.y = POSE.y;
+
+
         
     } else if (command.action == "STOP") {
         currentMovement = STOP_CMD;
@@ -774,9 +768,9 @@ const char *MAZE_ASCII_ART =
     "|   |   |   |       |       |               |   |   |   |   |   |\n"
     "o   o   o   o---o   o   o   o---o---o   o---o   o   o   o   o   o\n"
     "|   |   |       |       |                       |   |   |   |   |\n"
-    "o---o   o---o---o---o   o---o---o---o---o---o---o   o   o   o   o\n"
+    "o   o   o---o---o---o   o---o---o---o---o---o---o   o   o   o   o\n"
     "|               |   |                               |   |   |   |\n"
-    "o---o---o   o   o   o   o---o---o---o---o---o   o---o   o   o   o\n"
+    "o   o---o   o   o   o   o---o---o---o---o---o   o---o   o   o   o\n"
     "|   |       |   |   |                                   |   |   |\n"
     "o   o   o   o   o   o---o---o---o---o---o---o---o   o---o   o   o\n"
     "|       |       |                               |           |   |\n"
@@ -1038,6 +1032,7 @@ bool checkTargetReached() {
 
     if (currentMovement == FWD) {
         dist_thresh_mm = 20.0f; // 20 mm
+        
         // For FWD, primarily check distance. Angle is less critical once on path.
         return dist_sq_mm < (dist_thresh_mm * dist_thresh_mm);
     } else if (currentMovement == TURN_L || currentMovement == TURN_R) {
@@ -1082,13 +1077,16 @@ int main()
 {
     srand(time(NULL)); // Seed the random number generator
 
+    Queue commandQueue = {Command {"FWD", 3}, Command {"TRN", -90}, Command {"FWD", 2}, Command {"STOP", 0}};
+
     parse_maze_string(MAZE_ASCII_ART);
     print_maze();
 
     global_init();
 
     POSE.x = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
-    POSE.y = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
+    // POSE.y = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
+    POSE.y = 0; // Start at back of first cell
     POSE.theta = PI / 2.0f; // Facing "up" in the maze (0 degrees is +Y)
     printf("Initial pose: x=%.2fm, y=%.2fm, th=%.1fdeg\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI);
 
@@ -1101,6 +1099,8 @@ int main()
 
     uint64_t loop_time_prev_us = time_us_64();
     int loop_count = 0;
+
+    setTarget(commandQueue.pop());
 
     while (true)
     {
@@ -1167,12 +1167,14 @@ int main()
         // printf("dx: %.2f mm, dy: %.2f mm\n", odom_dx_world_mm, odom_dy_world_mm);
 
         motion_update(odom_dx_world_mm, odom_dy_world_mm, drot_rad_imu);
-        estimate_pose_from_particles();
+        POSE.x += odom_dx_world_mm;
+        POSE.y += odom_dy_world_mm;
+        // estimate_pose_from_particles();
 
-        printf(">>> vizPARTICLES ");
+        // printf(">>> vizPARTICLES ");
         for (int i = 0; i < NUM_PARTICLES; ++i)
         {
-            printf("%.2f %.2f %.2f ", particles[i].pos.x, particles[i].pos.y, particles[i].rot_rad);
+            ;// printf("%.2f %.2f %.2f ", particles[i].pos.x, particles[i].pos.y, particles[i].rot_rad);
         }
         printf("\n");
         fflush(stdout);
@@ -1185,10 +1187,11 @@ int main()
             VContr.reset(); // Reset PID integrators for new maneuver
             WContr.reset();
 
-            Command next_cmd = decide_next_action_tof_based();
-            printf("Next command: %s, value: %.1f\n", next_cmd.action.c_str(), next_cmd.value);
+            // Command next_cmd = decide_next_action_tof_based();
+            // Command next_cmd = commandQueue.pop();
+            // printf("Next command: %s, value: %.1f\n", next_cmd.action.c_str(), next_cmd.value);
 
-            setTarget(next_cmd); // Updates global TARGET_POSE, prevTARGET_POSE, CURRENT_MOVEMENT, targetReached=false
+            // setTarget(next_cmd); // Updates global TARGET_POSE, prevTARGET_POSE, CURRENT_MOVEMENT, targetReached=false
 
             // printf("New target set: x=%.2fm, y=%.2fm, th=%.1fdeg. Movement: %d. Target V:%.2f W:%.2f\n",
             //        TARGET_POSE.x, TARGET_POSE.y, TARGET_POSE.theta, static_cast<int>(CURRENT_MOVEMENT), TARGET_POSE.v, TARGET_POSE.w);
@@ -1207,7 +1210,7 @@ int main()
         float w_ref_stanley_radps = StanContr.output(); 
 
         float v_effort = VContr.output(targetPose.v, POSE.v); // targetPose.v in mm/s
-        float w_effort = WContr.output(w_ref_stanley_radps, POSE.w); // targetPose.w (from Stanley) in rad/s
+        float w_effort = WContr.output(targetPose.w, POSE.w); // targetPose.w (from Stanley) in rad/s
 
         float duty_L_percent = v_effort - w_effort;
         float duty_R_percent = v_effort + w_effort;
@@ -1222,6 +1225,10 @@ int main()
        if (!targetReached) {
             targetReached = checkTargetReached();
             if (targetReached) {
+                Command next_cmd = commandQueue.pop();
+                setTarget(next_cmd);
+                printf("Next command: %s, value: %.1f\n", next_cmd.action.c_str(), next_cmd.value);
+
                  // currentMovement = IDLE; // Optional: transition to IDLE
             }
         }
@@ -1234,7 +1241,7 @@ int main()
                targetReached, static_cast<int>(currentMovement), w_ref_stanley_radps, duty_L_percent, duty_R_percent);
              fflush(stdout);
         }
-        sleep_ms(50);
+        // sleep_ms(5);
     }
 
     return 0;

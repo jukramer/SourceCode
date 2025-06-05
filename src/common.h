@@ -33,6 +33,13 @@ enum Direction
     BLOCKED = 99
 };
 
+struct Command {
+    std::string action; // "FWD", "TRN", "STOP"
+    float value;        // cells for FWD, radians for TRN (positive for left)
+};
+
+enum MovementType { FWD, TURN_L, TURN_R, STOP_CMD, IDLE };
+
 constexpr Direction OPPOSITE[4] = {SOUTH, WEST, NORTH, EAST};
 constexpr Direction LEFT_FROM[4] = {WEST, NORTH, EAST, SOUTH};
 constexpr Direction ROTATE_RIGHT[4] = {EAST, SOUTH, WEST, NORTH};
