@@ -4,6 +4,7 @@
 #include <vector>
 #include <random>
 #include <time.h>
+#include "linalg.h"
 #include <math.h>
 
 #define PI 3.14159265358979323846f // Define PI constant
@@ -161,6 +162,7 @@ public:
         tPrev = time_us_64();
     }
 };
+
 
 class WController
 {

@@ -1,4 +1,5 @@
 #include "API.h"
+#include <tuple>
 
 force_inline bool isUnvisited(int x, int y)
 {
@@ -156,14 +157,180 @@ void floodFill()
     printMaze();
 }
 
-/*std::string fastestPath(Mouse &mouse)
+struct CellCoord {
+    int C;
+    int R;
+
+    CellCoord operator+(const CellCoord c2) const {
+        CellCoord result;
+        result.C = C + c2.C;
+        result.R = R + c2.R;
+        
+        return result;
+    }
+
+    CellCoord operator-(const CellCoord c2) const {
+        CellCoord result;
+        result.C = C - c2.C;
+        result.R = R - c2.R;
+        
+        return result;
+    }
+};
+
+#include <string>
+#include <algorithm>
+
+// Enum for mouse heading
+enum class Heading { NORTH, EAST, SOUTH, WEST };
+
+// Function to check if a cell is a goal cell
+bool isGoalCell(int x, int y) {
+    return (x == 7 && y == 7) || (x == 8 && y == 7) ||
+           (x == 7 && y == 8) || (x == 8 && y == 8);
+}
+
+// Function to find the fastest path from {0,15} to a goal cell
+std::string findFastestPath(int floodMatrix[16][16]) {
+    std::string path; // Dynamic string for path commands
+
+    // Starting position and heading
+    int x = 0, y = 15; // Starting at {0,15} (floodMatrix[15][0])
+    Heading heading = Heading::NORTH; // Assume initial heading is North
+
+    while (!isGoalCell(x, y)) {
+        // Define movements relative to current heading
+        int forwardX = x, forwardY = y, leftX = x, leftY = y, rightX = x, rightY = y;
+        char moveCommand = '\0';
+
+        // Determine coordinates of forward, left, and right cells based on heading
+        switch (heading) {
+            case Heading::NORTH:
+                forwardX = x; forwardY = y - 1; // Up
+                leftX = x - 1; leftY = y;       // West
+                rightX = x + 1; rightY = y;     // East
+                break;
+            case Heading::EAST:
+                forwardX = x + 1; forwardY = y; // Right
+                leftX = x; leftY = y - 1;       // North
+                rightX = x; rightY = y + 1;     // South
+                break;
+            case Heading::SOUTH:
+                forwardX = x; forwardY = y + 1; // Down
+                leftX = x + 1; leftY = y;       // East
+                rightX = x - 1; rightY = y;     // West
+                break;
+            case Heading::WEST:
+                forwardX = x - 1; forwardY = y; // Left
+                leftX = x; leftY = y + 1;       // South
+                rightX = x; rightY = y - 1;     // North
+                break;
+        }
+
+        // Evaluate floodfill values for forward, left, and right cells
+        int minValue = 999; // Large number for unreachable cells
+        int nextX = x, nextY = y;
+
+        // Check forward cell
+        if (forwardY >= 0 && forwardY < 16 && forwardX >= 0 && forwardX < 16 &&
+            floodMatrix[forwardY][forwardX] < minValue) {
+            minValue = floodMatrix[forwardY][forwardX];
+            nextX = forwardX;
+            nextY = forwardY;
+            moveCommand = 'F';
+        }
+
+        // Check left cell
+        if (leftY >= 0 && leftY < 16 && leftX >= 0 && leftX < 16 &&
+            floodMatrix[leftY][leftX] < minValue) {
+            minValue = floodMatrix[leftY][leftX];
+            nextX = leftX;
+            nextY = leftY;
+            moveCommand = 'L';
+        }
+
+        // Check right cell
+        if (rightY >= 0 && rightY < 16 && rightX >= 0 && rightX < 16 &&
+            floodMatrix[rightY][rightX] < minValue) {
+            minValue = floodMatrix[rightY][rightX];
+            nextX = rightX;
+            nextY = rightY;
+            moveCommand = 'R';
+        }
+
+        // If no valid move is found, stop (shouldn't happen with correct floodMatrix)
+        if (moveCommand == '\0') {
+            path += 'S';
+            break;
+        }
+
+        // Update heading based on the move
+        if (moveCommand == 'L') {
+            switch (heading) {
+                case Heading::NORTH: heading = Heading::WEST; break;
+                case Heading::EAST: heading = Heading::NORTH; break;
+                case Heading::SOUTH: heading = Heading::EAST; break;
+                case Heading::WEST: heading = Heading::SOUTH; break;
+            }
+        } else if (moveCommand == 'R') {
+            switch (heading) {
+                case Heading::NORTH: heading = Heading::EAST; break;
+                case Heading::EAST: heading = Heading::SOUTH; break;
+                case Heading::SOUTH: heading = Heading::WEST; break;
+                case Heading::WEST: heading = Heading::NORTH; break;
+            }
+        } // No heading change for 'F'
+
+        // Append the move command and update position
+        path += moveCommand;
+        x = nextX;
+        y = nextY;
+    }
+
+    // Append stop command when goal is reached
+    path += 'S';
+
+    return path;
+}
+
+
+
+// std::vector<CellCoord> getNeighbors(CellCoord coord) {
+//     std::vector<CellCoord> neighbors;
+
+//     CellCoord diff[4] = {{-1,0}, {0,1}, {1,0}, {0,-1}};
+
+//     for (CellCoord d : diff) {
+//         CellCoord neighbor = coord - d;
+//         if (!(neighbor.C < 0 || neighbor.C > 15 || neighbor.R < 0 || neighbor.R > 15)) {
+//             neighbors.push_back(neighbor)    ;    
+//         }
+//     }
+    
+//     return neighbors;
+// }
+
+// std::string fastestPath() {
+//     #define forward 100
+//     #define right 101
+//     #define left 102
+//     #define backward 103
+
+//     CellCoord cell = {0, 15};
+
+//     std::vector<CellCoord> neighbors = getNeighbors(cell);
+    
+// }
+
+/*
+std::string fastestPath()
 {
     // TODO: encourage to take diagonals
 
     // Fastest path solely based on floodfill distance
     std::string path = "";
 
-    Point currentCell = {0, 15};
+    Location currentCell = {0, 15};
     Direction currentDir = TOP;
     // Initial point
     for (int i = 0; i < 100; i++)
@@ -222,4 +389,4 @@ void floodFill()
     path += 'S';
 
     return path;
-}*/
+} */

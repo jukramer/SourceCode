@@ -33,6 +33,11 @@ enum Direction
     BLOCKED = 99
 };
 
+struct Point {
+    float x;
+    float y;
+};
+
 struct Command {
     std::string action; // "FWD", "TRN", "STOP"
     float value;        // cells for FWD, radians for TRN (positive for left)
@@ -84,6 +89,8 @@ public:
         return *this;
     }
 };
+
+std::string fastestPath(int floodMatrix);
 
 // Ring buffer queue for flood fill
 template <typename T>

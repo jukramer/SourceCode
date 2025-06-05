@@ -164,6 +164,14 @@ void Motor::update()
     this->DELTA_POS = deltaPos;
 }
 
+void Motor::updateSmooth() {
+    uint64_t now = time_us_64();
+    double pulses = double(*totalTicks - prevTicksRPM);
+    float dt_us = (now - tPrev);
+
+        
+}
+
 uint pwm_setup(uint gpio)
 {
     gpio_set_function(gpio, GPIO_FUNC_PWM);
