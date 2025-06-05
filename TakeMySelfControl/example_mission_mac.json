@@ -6,5 +6,8 @@
     "wheel_base": 8.0,
     "directory": "/Users/soti/DevLocal/SourceCode",
     "run_command": "./build/a.out",
-    "build_command": "sh ./build.sh"
+    "build_command": "sh ./build.sh",
+    "reset_pos_x": 9.0,
+    "reset_pos_y": 9.0,
+    "reset_pos_theta": 0.0
 }

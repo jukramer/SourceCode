@@ -6,5 +6,8 @@
     "wheel_base": 8.0,
     "directory": "C:/Users/justa/OneDrive/Desktop/MicroMouse/SourceCode",
     "run_command": ".\\build\\Main.exe",
-    "build_command": "build_debug.bat"
+    "build_command": "build_debug.bat",
+    "reset_pos_x": 9.0,
+    "reset_pos_y": 9.0,
+    "reset_pos_theta": 0.0
 }

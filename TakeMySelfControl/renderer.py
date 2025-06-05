@@ -408,6 +408,24 @@ class Mouse(Body):
 
         self.image = pg.image.load("sprite.png").convert_alpha()
 
+    def reset_position(self, x, y, theta):
+        self.pos = np.array([x, y]) * SCALE
+        self.rot = np.deg2rad(theta) + np.pi / 2
+
+        self.input_left_pwm = 0.0
+        self.input_right_pwm = 0.0
+        self.left_rpm = 0.0
+        self.right_rpm = 0.0
+
+        self.right_pwm = 0.0
+        self.left_pwm = 0.0
+
+        self.ang_vel = 0.0
+        self.vel = np.zeros(2)
+
+        self.right_pos = 0.0
+        self.left_pos = 0.0
+
     def handle_input(self, keys):
         self.input_left_pwm = 0.0
         self.input_right_pwm = 0.0

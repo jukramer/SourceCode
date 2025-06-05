@@ -17,3 +17,4 @@ __pycache__/
 
 pyside6_env/
 .DS_Store
+.venv
