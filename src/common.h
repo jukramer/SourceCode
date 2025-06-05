@@ -4,6 +4,8 @@
 #include <vector>
 #include <string>
 
+#define EPSILON 1e-6f
+
 typedef unsigned int uint;
 typedef void (*gpio_irq_callback_t)(uint gpio, uint32_t event_mask);
 
@@ -25,11 +27,10 @@ inline volatile byte STATE = STATE_IDLE; // Global state of the mouse
 
 enum Direction
 {
-    NORTH,
-    EAST,
-    SOUTH,
-    WEST,
-    HEADING_COUNT,
+    TOP = 0,
+    RIGHT = 1,
+    BOTTOM = 2,
+    LEFT = 3,
     BLOCKED = 99
 };
 
@@ -45,9 +46,9 @@ struct Command {
 
 enum MovementType { FWD, TURN_L, TURN_R, STOP_CMD, IDLE };
 
-constexpr Direction OPPOSITE[4] = {SOUTH, WEST, NORTH, EAST};
-constexpr Direction LEFT_FROM[4] = {WEST, NORTH, EAST, SOUTH};
-constexpr Direction ROTATE_RIGHT[4] = {EAST, SOUTH, WEST, NORTH};
+constexpr Direction OPPOSITE[4] = {BOTTOM, LEFT, TOP, RIGHT};
+constexpr Direction LEFT_FROM[4] = {LEFT, TOP, RIGHT, BOTTOM};
+constexpr Direction ROTATE_RIGHT[4] = {RIGHT, BOTTOM, LEFT, TOP};
 
 #define MAZE_SIZE 16
 #define MAZE_CELL_COUNT (MAZE_SIZE * MAZE_SIZE)
@@ -134,8 +135,69 @@ struct Cell
     };
 };
 
+
+struct Pose
+{
+    float x;     // mm
+    float y;     // mm
+    float theta; // radians, [-PI, PI), 0 along +X, PI/2 along +Y (CCW positive)
+    float v;     // linear velocity, mm/s
+    float w;     // angular velocity, rad/s (CCW positive)
+
+    Pose(float _x = 0.f, float _y = 0.f, float _theta = 0.f, float _v = 0.f, float _w = 0.f)
+        : x(_x), y(_y), theta(_theta), v(_v), w(_w) {}
+};
+
+struct Vec2f
+{
+    float x, y;
+
+    constexpr Vec2f(float x_ = 0.0f, float y_ = 0.0f) : x(x_), y(y_) {}
+
+    constexpr float norm() const
+    {
+        return sqrtf(x * x + y * y);
+    }
+
+    constexpr Vec2f normalized() const
+    {
+        float n = norm();
+        if (n < EPSILON)
+        {
+            return Vec2f(0.0f, 0.0f);
+        }
+        return Vec2f(x / n, y / n);
+    }
+
+    Vec2f operator+(const Vec2f &other) const
+    {
+        return Vec2f(x + other.x, y + other.y);
+    }
+
+    Vec2f operator-(const Vec2f &other) const
+    {
+        return Vec2f(x - other.x, y - other.y);
+    }
+
+    Vec2f operator*(float scalar) const
+    {
+        return Vec2f(x * scalar, y * scalar);
+    }
+
+    friend Vec2f operator*(float scalar, const Vec2f &vec)
+    {
+        return vec * scalar;
+    }
+};
+
 // Note: Must be in the same order as the bit fields in Cell!
 constexpr Location OFFSET_LOCATIONS[4] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+constexpr Vec2f OFFSET_VECTORS[4] = {
+    {0.0f, -1.0f}, // NORTH
+    {1.0f, 0.0f},  // EAST
+    {0.0f, 1.0f},  // SOUTH
+    {-1.0f, 0.0f}  // WEST
+};
 
 #define FORWARD 1
 #define BACKWARD -1

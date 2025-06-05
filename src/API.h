@@ -32,8 +32,9 @@ public:
     Motor(Motor_Choice choice);
 
     void setPWM(float PWM);
+    void setPWMRaw(int pwm);
+
     void update();
-    void updateSmooth();
 };
 
 enum class TOF_Direction
@@ -52,7 +53,6 @@ void global_init();
 void global_read_tofs();
 void global_read_imu();
 
-// This is only for simulation...
 void setWall_UI(int x, int y, Direction direction);
 
 extern "C" {

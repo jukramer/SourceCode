@@ -42,6 +42,9 @@ void c1_callback(uint gpio, uint32_t events)
         int encoded = (MSB << 1) |LSB;
         int sum = (lastEncodedL << 2) | encoded;
 
+        printf("c1_callback: Encoded: %d, Last Encoded: %d, Sum: %d, MSB: %d, LSB: %d\n", 
+               encoded, lastEncodedL, sum, MSB, LSB);
+
         if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) totalTicksL -= 1;
         if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) totalTicksL += 1;
 
@@ -58,6 +61,9 @@ void c2_callback(uint gpio, uint32_t events)
 
         int encoded = (MSB << 1) |LSB;
         int sum = (lastEncodedR << 2) | encoded;
+
+        printf("c2_callback: Encoded: %d, Last Encoded: %d, Sum: %d, MSB: %d, LSB: %d\n", 
+               encoded, lastEncodedR, sum, MSB, LSB);
 
         if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) totalTicksR -= 1;
         if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) totalTicksR += 1;
@@ -135,6 +141,11 @@ void Motor::setPWM(float pwm)
     analogWrite(pinPWM, actualPWM);
 }
 
+void Motor::setPWMRaw(int pwm)
+{
+    
+}
+
 void Motor::update()
 {
     uint64_t now = time_us_64();
@@ -162,14 +173,6 @@ void Motor::update()
 
     float deltaPos = pulses / TICKS_PER_REV * 2 * M_PI * WHEEL_RADIUS_MM;
     this->DELTA_POS = deltaPos;
-}
-
-void Motor::updateSmooth() {
-    uint64_t now = time_us_64();
-    double pulses = double(*totalTicks - prevTicksRPM);
-    float dt_us = (now - tPrev);
-
-        
 }
 
 uint pwm_setup(uint gpio)
@@ -538,4 +541,8 @@ void global_read_imu()
         imu_sample_count = 0;
         t_start = t2;
     }
+}
+
+void setWall_UI(int x, int y, Direction direction)
+{
 }
