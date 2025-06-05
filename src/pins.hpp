@@ -20,18 +20,15 @@ const uint tofXS4Pin = 20;
 const uint imuIntPin = 21;
 
 const uint ledPin = 22;
+
 const uint mlencPin = 26;
+const uint mlencPin2 = 8;
+
 const uint mrencPin = 27;
+const uint mrencPin2 = 9;
+
+
 const uint btnPin = 28;
-
-const uint allPins[] = {
-    imusclPin, imusdaPin, dirA1Pin, dirA2Pin, spdAPin,
-    dirB1Pin, dirB2Pin, spdBPin, tofsclPin, tofsdaPin, tofXL1Pin,
-    tofXS1Pin, tofXS2Pin, tofXS3Pin, tofXS4Pin, imuIntPin, ledPin,
-    mlencPin, mrencPin, btnPin
-};
-
-
 
 
 

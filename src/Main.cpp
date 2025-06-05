@@ -24,13 +24,20 @@
 #define TURN_RADIUS (CELL_WIDTH / 2.0f)     // mm
 #define W_MAX_NOMINAL (V_MAX / TURN_RADIUS) // Nominal angular velocity for turns (rad/s)
 
-#define WHEEL_RADIUS_MM 22.0f // mm
-#define WHEEL_BASE_MM 80.0f   // mm
-
 #define SENSOR_NOISE_STDDEV 0.1f
 const float SENSOR_NOISE_VAR = SENSOR_NOISE_STDDEV * SENSOR_NOISE_STDDEV;
 
 #define EPSILON 1e-6f
+
+constexpr float DEFAULT_MAX_SENSOR_RANGE_MM = 255.0f;
+constexpr float FRONT_MAX_SENSOR_RANGE_MM = 10.0f * 255.0f; // Front sensor has longer range
+
+#define CELL_SIZE_MM 180.0f
+
+constexpr float LOCAL_TOF_BASE_OFFSET_X_MM = 65.0f; // Offset along robot's local X-axis
+constexpr float LOCAL_TOF_RADIAL_OFFSET_MM = 25.0f; // Additional radial offset for each sensor
+
+constexpr float WALL_THICKNESS_MM = 12.0f; // Wall thickness in mm
 
 struct Pose
 {
@@ -104,6 +111,9 @@ float normalize_angle_pi_pi(float angle_rad)
 }
 
 Pose POSE(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+int CELL_X = 0;
+int CELL_Y = 0;
+
 Pose targetPose(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 Pose prevTargetPose(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 MovementType currentMovement = IDLE;
@@ -430,11 +440,11 @@ std::pair<float, float> controlLoop(float vTarget, float wTarget)
 {
     float rpmCurrentL = MotorL.RPM;
     float rpmCurrentR = MotorR.RPM;
-    float vCurrentL = rpmCurrentL * WHEEL_RADIUS / 60;
-    float vCurrentR = rpmCurrentR * WHEEL_RADIUS / 60;
+    float vCurrentL = rpmCurrentL * WHEEL_RADIUS_MM / 60;
+    float vCurrentR = rpmCurrentR * WHEEL_RADIUS_MM / 60;
     float vCurrentAVG = (vCurrentL + vCurrentR) / 2;
     POSE.v = (double)vCurrentAVG;
-    float wCurrent = (vCurrentR - vCurrentL) / WHEEL_BASE;
+    float wCurrent = (vCurrentR - vCurrentL) / WHEEL_BASE_MM;
     POSE.w = (double)wCurrent;
 
     float vOut = VContr.output(vTarget, vCurrentAVG);
@@ -450,10 +460,29 @@ std::pair<float, float> controlLoop(float vTarget, float wTarget)
     return {dutyL, dutyR};
 }
 
+Direction theta_to_direction()
+{
+    float theta = POSE.theta;
+
+    // Normalize to [-PI, PI)
+    while (theta >= PI)
+        theta -= 2.0f * PI;
+    while (theta < -PI)
+        theta += 2.0f * PI;
+
+    if (theta > -PI / 4 && theta <= PI / 4)
+        return Direction::EAST; // +X
+    else if (theta > PI / 4 && theta <= 3 * PI / 4)
+        return Direction::NORTH; // +Y
+    else if (theta <= -PI / 4 && theta > -3 * PI / 4)
+        return Direction::SOUTH; // -Y
+    else
+        return Direction::WEST; // -X
+}
+
 void setTarget(Command command)
 {
     prevTargetPose = targetPose; // The target we just arrived at (or current POSE if first command)
-
     targetReached = false;
 
     if (command.action == "FWD")
@@ -463,14 +492,144 @@ void setTarget(Command command)
         targetPose.w = 0.0f;  // Nominal angular velocity for FWD is 0
 
         // Current orientation of the robot (rad)
-        float current_pose_theta_rad = POSE.theta;
-        targetPose.theta = current_pose_theta_rad; // Maintain current orientation for FWD path
+        targetPose.theta = POSE.theta; // Maintain current orientation for FWD path
 
-        float distance_mm = CELL_WIDTH * command.value; // command.value is number of cells
+        int cells_forward = (int)command.value;
+        Direction dir = theta_to_direction();
 
-        // Update target X, Y based on current POSE.theta (radians, 0 along +X)
-        targetPose.x = POSE.x + distance_mm * cosf(current_pose_theta_rad);
-        targetPose.y = POSE.y + distance_mm * sinf(current_pose_theta_rad);
+        // Calculate the absolute coordinates of the *center* of the current cell
+        float current_cell_center_x = CELL_X * CELL_WIDTH + CELL_WIDTH / 2.0f;
+        float current_cell_center_y = CELL_Y * CELL_WIDTH + CELL_WIDTH / 2.0f;
+
+        // Calculate the distance from the robot's current POSE to the center of its current cell
+        float dist_from_pose_to_current_cell_center_x = current_cell_center_x - POSE.x;
+        float dist_from_pose_to_current_cell_center_y = current_cell_center_y - POSE.y;
+
+        // Calculate the distance to the wall of the *current* cell
+        float dist_to_current_cell_wall = 0.0f;
+
+        if (dir == Direction::EAST) // Moving +X
+        {
+            // Distance from current POSE.x to the right wall of the current cell
+            dist_to_current_cell_wall = (CELL_X + 1) * CELL_WIDTH - POSE.x;
+        }
+        else if (dir == Direction::NORTH) // Moving +Y
+        {
+            // Distance from current POSE.y to the top wall of the current cell
+            dist_to_current_cell_wall = (CELL_Y + 1) * CELL_WIDTH - POSE.y;
+        }
+        else if (dir == Direction::SOUTH) // Moving -Y
+        {
+            // Distance from current POSE.y to the bottom wall of the current cell
+            dist_to_current_cell_wall = POSE.y - CELL_Y * CELL_WIDTH;
+        }
+        else if (dir == Direction::WEST) // Moving -X
+        {
+            // Distance from current POSE.x to the left wall of the current cell
+            dist_to_current_cell_wall = POSE.x - CELL_X * CELL_WIDTH;
+        }
+
+        // Total distance to travel to stop *before* the target cell
+        // This includes:
+        // 1. Distance to the first wall (wall of current cell)
+        // 2. (cells_forward - 1) full cell widths (if moving more than 1 cell)
+        // 3. Subtract a small epsilon or robot radius if necessary to stop *at* the wall, not just before it.
+        //    For "just before entering the new cell", we assume we are at the edge of the previous cell.
+        float total_distance_to_travel = dist_to_current_cell_wall;
+
+        // Add the distance for the additional cells (excluding the first partial cell)
+        if (cells_forward > 1)
+        {
+            total_distance_to_travel += (cells_forward - 1) * CELL_WIDTH;
+        }
+
+        // Adjust targetPose based on total_distance_to_travel and current orientation
+        // Note: The problem statement wants to stop *before* the cell enter.
+        // This means the target should be at the wall that defines the boundary
+        // of the last cell we are traversing *through*.
+        // If cells_forward = 1, we stop at the first wall.
+        // If cells_forward = 2, we stop at the wall after the first cell.
+        //
+        // Let's re-think the total_distance_to_travel to explicitly target the wall.
+
+        float target_x_abs, target_y_abs; // Absolute target coordinates (not relative to POSE)
+
+        if (dir == Direction::EAST) // +X
+        {
+            // Target is the right wall of the (CELL_X + cells_forward - 1) cell
+            target_x_abs = (CELL_X + cells_forward) * CELL_WIDTH;
+            target_y_abs = POSE.y; // Y remains constant for FWD
+        }
+        else if (dir == Direction::NORTH) // +Y
+        {
+            // Target is the top wall of the (CELL_Y + cells_forward - 1) cell
+            target_x_abs = POSE.x; // X remains constant for FWD
+            target_y_abs = (CELL_Y + cells_forward) * CELL_WIDTH;
+        }
+        else if (dir == Direction::SOUTH) // -Y
+        {
+            // Target is the bottom wall of the (CELL_Y - cells_forward) cell
+            target_x_abs = POSE.x;
+            target_y_abs = (CELL_Y - cells_forward) * CELL_WIDTH;
+        }
+        else if (dir == Direction::WEST) // -X
+        {
+            // Target is the left wall of the (CELL_X - cells_forward) cell
+            target_x_abs = (CELL_X - cells_forward) * CELL_WIDTH;
+            target_y_abs = POSE.y;
+        }
+
+        targetPose.x = target_x_abs;
+        targetPose.y = target_y_abs;
+
+        // IMPORTANT: The above calculation assumes that CELL_X, CELL_Y represent the
+        // bottom-left corner of the cell. If they represent the center, the logic changes.
+        // Given your current calculation of CELL_X * CELL_WIDTH, it suggests CELL_X/Y
+        // might be indices, and CELL_WIDTH is the size of each cell.
+        // Let's re-verify the coordinate system.
+
+        // Assuming CELL_X, CELL_Y are integer indices of the current cell,
+        // and the origin (0,0) is at the bottom-left of the entire grid.
+        // And CELL_WIDTH is the side length of a square cell.
+
+        // The current POSE.x and POSE.y are the robot's actual coordinates.
+        // CELL_X * CELL_WIDTH is the left edge of the current cell.
+        // (CELL_X + 1) * CELL_WIDTH is the right edge of the current cell.
+        // CELL_Y * CELL_WIDTH is the bottom edge of the current cell.
+        // (CELL_Y + 1) * CELL_WIDTH is the top edge of the current cell.
+
+        // Let's refine the target based on this assumption:
+
+        float target_x_wall, target_y_wall;
+
+        if (dir == Direction::EAST) // Moving +X
+        {
+            // The robot should stop at the left wall of the (CELL_X + cells_forward) cell.
+            // This is equivalent to the right wall of the (CELL_X + cells_forward - 1) cell.
+            target_x_wall = (CELL_X + cells_forward) * CELL_WIDTH + LOCAL_TOF_BASE_OFFSET_X_MM;
+            target_y_wall = POSE.y;
+        }
+        else if (dir == Direction::NORTH) // Moving +Y
+        {
+            // Stop at the bottom wall of the (CELL_Y + cells_forward) cell.
+            target_x_wall = POSE.x;
+            target_y_wall = (CELL_Y + cells_forward) * CELL_WIDTH + LOCAL_TOF_BASE_OFFSET_X_MM;
+        }
+        else if (dir == Direction::SOUTH) // Moving -Y
+        {
+            // Stop at the top wall of the (CELL_Y - cells_forward) cell.
+            target_x_wall = POSE.x;
+            target_y_wall = (CELL_Y - cells_forward + 1) * CELL_WIDTH - LOCAL_TOF_BASE_OFFSET_X_MM; // +1 because we are moving "backwards" to the top wall of the target cell.
+        }
+        else if (dir == Direction::WEST) // Moving -X
+        {
+            // Stop at the right wall of the (CELL_X - cells_forward) cell.
+            target_x_wall = (CELL_X - cells_forward + 1) * CELL_WIDTH - LOCAL_TOF_BASE_OFFSET_X_MM; // +1 because we are moving "backwards" to the right wall of the target cell.
+            target_y_wall = POSE.y;
+        }
+
+        targetPose.x = target_x_wall;
+        targetPose.y = target_y_wall;
     }
     else if (command.action == "TRN")
     {
@@ -504,16 +663,6 @@ void setTarget(Command command)
         targetReached = true;
     }
 }
-
-constexpr float DEFAULT_MAX_SENSOR_RANGE_MM = 255.0f;
-constexpr float FRONT_MAX_SENSOR_RANGE_MM = 10.0f * 255.0f; // Front sensor has longer range
-
-#define CELL_SIZE_MM 180.0f
-
-constexpr float LOCAL_TOF_BASE_OFFSET_X_MM = 65.0f; // Offset along robot's local X-axis
-constexpr float LOCAL_TOF_RADIAL_OFFSET_MM = 25.0f; // Additional radial offset for each sensor
-
-constexpr float WALL_THICKNESS_MM = 12.0f; // Wall thickness in mm
 
 struct RayMarchResult
 {
@@ -939,7 +1088,7 @@ Vec2f sample_around_pose()
     return Vec2f(x, y);
 }
 
-void resample_particles() 
+void resample_particles()
 {
     for (int i = 0; i < NUM_PARTICLES; ++i)
     {
@@ -1014,8 +1163,8 @@ void localize_particles()
         }
         new_particles[m] = particles[i];
 
-        new_particles[m].pos.x += rand_gauss(0.0f, 2.0f);  // mm
-        new_particles[m].pos.y += rand_gauss(0.0f, 2.0f);  // mm
+        new_particles[m].pos.x += rand_gauss(0.0f, 2.0f);    // mm
+        new_particles[m].pos.y += rand_gauss(0.0f, 2.0f);    // mm
         new_particles[m].rot_rad += rand_gauss(0.0f, 0.02f); // radians
     }
     std::swap(particles, new_particles);
@@ -1057,10 +1206,14 @@ void motion_update(float dx, float dy, float drot)
             else
             {
                 Direction dir;
-                if (cell_x > old_cell_x) dir = Direction::WEST;
-                else if (cell_x < old_cell_x) dir = Direction::EAST;
-                else if (cell_y > old_cell_y) dir = Direction::NORTH;
-                else if (cell_y < old_cell_y) dir = Direction::SOUTH;
+                if (cell_x > old_cell_x)
+                    dir = Direction::WEST;
+                else if (cell_x < old_cell_x)
+                    dir = Direction::EAST;
+                else if (cell_y > old_cell_y)
+                    dir = Direction::NORTH;
+                else if (cell_y < old_cell_y)
+                    dir = Direction::SOUTH;
 
                 Cell &new_cell = MAZE_MATRIX[cell_y][cell_x];
                 if (new_cell.walls & (1 << (int)dir))
@@ -1121,8 +1274,6 @@ void estimate_pose_from_particles()
     POSE.x = est_x_mm;
     POSE.y = est_y_mm;
     POSE.theta = normalize_angle_pi_pi(est_rot_rad_atan2);
-
-    printf("Estimated pose: x=%.2fmm, y=%.2fmm, th=%.1fdeg\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI);
 }
 
 bool checkTargetReached()
@@ -1239,19 +1390,19 @@ int main()
 
         if (delta_s_body_mm > 0)
         {
-            printf("Robot is moving forward\n");
+            // printf("Robot is moving forward\n");
         }
         else if (delta_s_body_mm < 0)
         {
-            printf("Robot is moving backward\n");
+            // printf("Robot is moving backward\n");
         }
         else if (delta_theta_rad > EPSILON)
         {
-            printf("Robot is turning left\n");
+            // printf("Robot is turning left\n");
         }
         else if (delta_theta_rad < -EPSILON)
         {
-            printf("Robot is turning right\n");
+            // printf("Robot is turning right\n");
         }
 
         float rps = GYRO_Z * (float)PI / 180.0f; // Convert degrees per second to radians per second
@@ -1266,7 +1417,7 @@ int main()
         float odom_dx_world_mm = delta_s_body_mm * cosf(POSE.theta);
         float odom_dy_world_mm = delta_s_body_mm * sinf(POSE.theta);
 
-        printf("dx: %.2f mm, dy: %.2f mm\n", odom_dx_world_mm, odom_dy_world_mm);
+        // printf("dx: %.2f mm, dy: %.2f mm\n", odom_dx_world_mm, odom_dy_world_mm);
 
         motion_update(odom_dx_world_mm, odom_dy_world_mm, drot_rad_imu);
         localize_particles(); // Update particle weights and resample
@@ -1274,6 +1425,11 @@ int main()
         // POSE.x += odom_dx_world_mm;
         // POSE.y += odom_dy_world_mm;
         estimate_pose_from_particles();
+
+        CELL_X = (int)(POSE.x / CELL_SIZE_MM);
+        CELL_Y = 15 - (int)(POSE.y / CELL_SIZE_MM);
+
+        printf("Estimated pose: x=%.2fmm, y=%.2fmm, th=%.1fdeg, cell=(%d,%d)\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI, CELL_X, CELL_Y);
 
         printf(">>> vizPARTICLES ");
         for (int i = 0; i < NUM_PARTICLES; i += 50)
@@ -1321,9 +1477,6 @@ int main()
 
         duty_L_percent = std::max(-100.0f, std::min(100.0f, duty_L_percent));
         duty_R_percent = std::max(-100.0f, std::min(100.0f, duty_R_percent));
-
-        // sleep_ms(200); // Small delay to allow other tasks to run
-        continue;
 
         MotorL.setPWM(duty_L_percent);
         MotorR.setPWM(duty_R_percent);

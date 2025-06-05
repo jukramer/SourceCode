@@ -133,5 +133,5 @@ constexpr Location OFFSET_LOCATIONS[4] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 #define FORWARD 1
 #define BACKWARD -1
 
-#define WHEEL_RADIUS 2.2
-#define WHEEL_BASE 7.6
+#define WHEEL_RADIUS_MM 22
+#define WHEEL_BASE_MM 80
