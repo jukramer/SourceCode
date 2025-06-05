@@ -18,7 +18,7 @@
 
 // Motor Constants/Variables
 #define TICKS_PER_REV 7.0
-#define GEAR_RATIO 30.0
+#define GEAR_RATIO 25.0
 
 volatile int64_t totalTicksL = 0;
 volatile int64_t totalTicksR = 0;
