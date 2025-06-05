@@ -24,37 +24,49 @@ Motor::Motor(Motor_Choice choice)
     this->choice = choice;
 }
 
-void Motor::setPWM(float PWM)
+void Motor::setPWM(float pwm)
 {
+    pwm = fmaxf(fminf(pwm, 100.0f), -100.0f); // Cap PWM to [-100, 100]
+    this->PWM = pwm;
+
+    int sign = 1;
+    if (pwm < 0.0)
+    {
+        DIR = BACKWARD;
+    }
+    else
+    {
+        DIR = FORWARD;
+    }
+    
     printf(">>> setPWM %s %f\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT", PWM);
     fflush(stdout);
 }
 
-float Motor::readRPM()
-{
+void Motor::update() {
     printf(">>> readRPM %s\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT");
     fflush(stdout);
 
     float rpm = 0.0f;
     scanf("%f", &rpm);
 
-    return rpm;
-}
+    this->RPM = rpm;
 
-float Motor::readPOS() {
     printf(">>> readPOS %s\n", choice == Motor_Choice::LEFT ? "LEFT" : "RIGHT");
     fflush(stdout);
 
     float dist = 0.0f;
     scanf("%f", &dist);
-    
+
     if (prevDist == 0.0f) {
         prevDist = dist;
     }
 
-    return dist - prevDist;
-}
+    float result = dist - prevDist;
+    prevDist = dist;
 
+    this->DELTA_POS = result;
+}
 
 void global_init()
 {
@@ -62,20 +74,27 @@ void global_init()
 
 void global_read_tofs()
 {
+    for (int direction = 0; direction < NUM_TOF_SENSORS; direction++)
+    {
+        printf(">>> readTOF %d\n", direction);
+        fflush(stdout);
+
+        char valid_char;
+        scanf("%d %c", &MM[direction], &valid_char);
+
+        MM_VALID[direction] = (valid_char == 't' || valid_char == 'T');
+    }
 }
 
-TOF_Reading global_get_tof(TOF_Direction direction)
+void global_read_imu()
 {
-    printf(">>> readTOF %d\n", direction);
+    printf(">>> readIMU\n");
     fflush(stdout);
 
-    TOF_Reading reading;
-    reading.distance = 0;
-    
-    char valid_char;
-    scanf("%f %c", &reading.distance, &valid_char);
+    float ax, ay, gyro_z;
+    scanf("%f %f %f", &ax, &ay, &gyro_z);
 
-    reading.valid = (valid_char == 't' || valid_char == 'T');
-
-    return reading;
+    AX = ax;
+    AY = ay;
+    GYRO_Z = gyro_z;
 }

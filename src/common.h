@@ -37,94 +37,9 @@ constexpr Direction OPPOSITE[4] = {SOUTH, WEST, NORTH, EAST};
 constexpr Direction LEFT_FROM[4] = {WEST, NORTH, EAST, SOUTH};
 constexpr Direction ROTATE_RIGHT[4] = {EAST, SOUTH, WEST, NORTH};
 
-/***
- * Heading is relative to the robot's orientation. They do not refer to
- * any particular direction and are just used to make code more readable where
- * decisions are made about which way to turn.
- */
-
-enum Heading
-{
-    AHEAD,
-    RIGHT,
-    BACK,
-    LEFT,
-    DIRECTION_COUNT
-};
-
 #define MAZE_SIZE 16
 #define MAZE_CELL_COUNT (MAZE_SIZE * MAZE_SIZE)
 #define MAX_COST (MAZE_CELL_COUNT - 1)
-
-using string = const char *;
-
-struct Pose {
-    double x;
-    double y;
-    double theta;
-    double v;
-    double w;
-
-    force_inline Pose operator+(Pose p2) {
-        return {x+p2.x, y+p2.y, theta+p2.theta, v+p2.v, w+p2.w};
-    }
-
-    force_inline Pose operator-(Pose p2) {
-        return {x-p2.x, y-p2.y, theta-p2.theta, v-p2.v, w-p2.w};
-    }
-
-    force_inline bool operator>(Pose p2) {
-        if (x>p2.x&&y>p2.y&&theta>p2.theta&&v>p2.v&&w>p2.w) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    force_inline bool operator<(Pose p2) {
-        if (x<p2.x&&y<p2.y&&theta<p2.theta&&v<p2.v&&w<p2.w) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    force_inline bool operator>=(Pose p2) {
-        if (x>=p2.x&&y>=p2.y&&theta>=p2.theta&&v>=p2.v&&w>=p2.w) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    force_inline bool operator<=(Pose p2) {
-        if (x<=p2.x&&y<=p2.y&&theta<=p2.theta&&v<=p2.v&&w<=p2.w) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-};
-
-struct Command {
-    string action; // FWD, SS, STOP
-    int value; // 3, 90...
-};
-
-// Movement 
-#define IDLE 0
-#define FWD 1
-#define TURN_L 2
-#define TURN_R 3
-#define STOP -1
-
-inline int currentMovement = IDLE;
-inline bool targetReached = false;
-inline bool running = true;
-inline Pose targetPose = {0, 0, 0, 0, 0};
-inline Pose prevTargetPose = {0, 0, 0, 0, 0};
-
-std::vector<Command> stateMachineSimple(const std::string &path);
 
 class Location
 {

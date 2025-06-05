@@ -1,3 +1,5 @@
+from PySide6.QtWidgets import QLabel, QPushButton
+
 import tab
 
 class Tab(tab.Tab):
@@ -13,7 +15,23 @@ class Tab(tab.Tab):
 
         self.create_input_box("Wheel Radius [cm]", "wheel_radius")
         self.create_input_box("Wheel Base [cm]", "wheel_base")
-        
+
+        self.create_input_box("Reset Pos X [cm]", "reset_pos_x")
+        self.create_input_box("Reset Pos Y [cm]", "reset_pos_y")
+        self.create_input_box("Reset Pos Theta [deg]", "reset_pos_theta")
+
+        def reset():
+            mouse = self.uber.pg_renderer.mouse
+            mouse.reset_position(
+                self.uber.mission.reset_pos_x,
+                self.uber.mission.reset_pos_y,
+                self.uber.mission.reset_pos_theta
+            )
+
+        reset_button = QPushButton("Reset")
+        reset_button.clicked.connect(reset)
+        self.addRow(QLabel(">>> "), reset_button)
+
         self.separator()
 
 
