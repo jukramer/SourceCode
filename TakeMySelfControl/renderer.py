@@ -714,6 +714,9 @@ class PgRenderer:
 
         self.mouse = Mouse(uber)
 
+        self.viz_pose = None
+        self.viz_target = None
+
         for y in range(CELL_COUNT):
             for x in range(CELL_COUNT):
                 cell = self.maze[y][x]
@@ -815,11 +818,19 @@ class PgRenderer:
             return pg.Rect(cx - WALL_THICKNESS // 2, cy, WALL_THICKNESS, CELL_SIZE)
 
     def set_wall_seen(self, x, y, direction):
+        if isinstance(direction, int):
+            direction = Direction(direction)
         wall = self.add_wall(self.get_wall_rect(x, y, direction))
         self.walls_seen_aabbs.append(wall.transformed_shape.aabb)
 
     def set_particles(self, particles):
         self.particles = particles
+
+    def set_viz_pose(self, x, y, theta):
+        self.viz_pose = (x, y, theta)
+    
+    def set_viz_target(self, x, y, theta):
+        self.viz_target = (x, y, theta)
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -891,6 +902,28 @@ class PgRenderer:
             end_x = x + math.cos(rot) * 20
             end_y = y + math.sin(rot) * 20
             pg.draw.line(self.surface, (255, 255, 0), (int(x), int(y)), (int(end_x), int(end_y)), 2)
+
+        if self.viz_target:
+            tx, ty, ttheta = self.viz_target
+            tx = tx * SCALE
+            ty = 16 * CELL_SIZE - ty * SCALE
+            ttheta = -ttheta
+
+            pg.draw.circle(self.surface, (0, 255, 0), (int(tx), int(ty)), 4)
+            t_end_x = tx + math.cos(ttheta) * 20
+            t_end_y = ty + math.sin(ttheta) * 20
+            pg.draw.line(self.surface, (0, 255, 0), (int(tx), int(ty)), (int(t_end_x), int(t_end_y)), 2)
+
+        if self.viz_pose:
+            x, y, theta = self.viz_pose
+            x = x * SCALE
+            y = 16 * CELL_SIZE - y * SCALE
+            theta = -theta
+
+            pg.draw.circle(self.surface, (255, 0, 0), (int(x), int(y)), 4)
+            end_x = x + math.cos(theta) * 20
+            end_y = y + math.sin(theta) * 20
+            pg.draw.line(self.surface, (255, 0, 0), (int(x), int(y)), (int(end_x), int(end_y)), 2)
 
         return self.surface
 

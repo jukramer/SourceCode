@@ -49,6 +49,8 @@ enum class TOF_Direction
 
 #define NUM_TOF_SENSORS ((int) TOF_Direction::COUNT)
 
+void floodFill();
+
 void global_init();
 void global_read_tofs();
 void global_read_imu();
@@ -64,7 +66,7 @@ void sleep_ms(uint32_t ms);
 inline Cell MAZE_MATRIX[MAZE_SIZE][MAZE_SIZE] = {}; // Init to empty with = {};
 inline volatile byte FLOOD_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
 inline volatile byte FLOOD_GEN_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
-inline volatile byte MOVE_MATRIX[MAZE_SIZE][MAZE_SIZE];
+inline volatile byte MOVE_MATRIX[MAZE_SIZE][MAZE_SIZE] = {255};
 inline volatile byte CURRENT_FLOOD_GEN = 0;
 
 //
@@ -77,17 +79,17 @@ inline float AX = 0.0f;
 inline float AY = 0.0f;
 inline float GYRO_Z = 0.0f;
 
-inline void setWall(Location location, Direction dir, WallState state)
+inline void setWall(int x, int y, Direction dir)
 {
-    MAZE_MATRIX[location.y][location.x].walls |= (state << dir);
-    MOVE_MATRIX[location.y][location.x] &= ~(state << dir);
+    MAZE_MATRIX[y][x].walls |= (1 << dir);
+    MOVE_MATRIX[y][x] &= ~(1 << dir);
 
-    Location n = location + OFFSET_LOCATIONS[dir];
+    Location n = Location{x, y} + OFFSET_LOCATIONS[dir];
     if (n.is_in_maze())
     {
         MAZE_MATRIX[n.y][n.x].walls |= (1 << OPPOSITE[dir]);
         MOVE_MATRIX[n.y][n.x] &= ~(1 << OPPOSITE[dir]);
     }
 
-    setWall_UI(location.x, location.y, dir);
+    setWall_UI(x, y, dir);
 }
