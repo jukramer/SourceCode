@@ -143,7 +143,7 @@ void Motor::setPWM(float pwm)
 
 void Motor::setPWMRaw(int pwm)
 {
-    
+    ;
 }
 
 void Motor::update()
@@ -238,10 +238,10 @@ void global_init()
 {
     stdio_init_all();
 
-    while (!stdio_usb_connected())
-    {
-        sleep_ms(1000);
-    }
+    // while (!stdio_usb_connected())
+    // {
+    //     sleep_ms(1000);
+    // }
 
     //
     // Turn on LEDs

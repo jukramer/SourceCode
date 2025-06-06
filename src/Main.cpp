@@ -1209,8 +1209,7 @@ bool wall_right() {
     }
 }
 
-int main()
-{
+int main() {
     printf("In main!\n");
     global_init();
     printf("Inited!\n");
@@ -1254,38 +1253,45 @@ int main()
         Command command = pathPrint.pop();
         printf("%s, %f\n", command.action.c_str(), command.value);
     }
-    
-    while (true) {
-        // printf("%s\n", path);flo
-    }
 
-    /*
+    STATE = STATE_FAST_RUN;
 
+    // while (true) {
+    //     MotorL.setPWM(50);
+    //     MotorR.setPWM(50);
+    //     MotorL.update();
+    //     MotorR.update();
+    //     sleep_ms(1000);
+    //     MotorL.setPWM(0);
+    //     MotorR.setPWM(0);
+    //     MotorL.update();
+    //     MotorR.update();
+    //     sleep_ms(5000);
+    // }
 
-    while (true)
-    /*while (true)
-    {
-        if (stdio_usb_connected())
-        {
-            printf("---------- TESTING LEFT MOTOR -----------");
-            motorTest(MotorL);
+    // while (true)
+    // {
+    //     if (stdio_usb_connected())
+    //     {
+    //         printf("---------- TESTING LEFT MOTOR -----------");
+    //         motorTest(MotorL);
 
-            printf("---------- TESTING RIGHT MOTOR -----------");
-            motorTest(MotorR);
-        }
-        else
-        {
-            MotorR.setPWM(0);
-            MotorL.setPWM(0);
-        }
-    }*/
+    //         printf("---------- TESTING RIGHT MOTOR -----------");
+    //         motorTest(MotorR);
+    //     }
+    //     else
+    //     {
+    //         MotorR.setPWM(0);
+    //         MotorL.setPWM(0);
+    //     }
+    // }
 
     //parse_maze_string(MAZE_ASCII_ART);
-
+    
     print_maze();
 
-    //Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -PI/2}, Command{"FWD", 2}, Command{"STOP", 0}};
-    Queue commandQueue = {Command{"FWD", 1},  Command{"STOP", 0}};
+    Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -PI/2}, Command{"FWD", 2}, Command{"STOP", 0}};
+    // Queue commandQueue = {Command{"FWD", 1},  Command{"STOP", 0}};
 
     POSE.x = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
     POSE.y = CELL_SIZE_MM * 0.5f; // Start at the center of the first cell
@@ -1438,10 +1444,17 @@ int main()
         }
         sleep_ms(1);
     }
-
+    
     if (STATE = STATE_FAST_RUN) {
+        // Init fastest path 
         floodFill();
         commandQueue = fastestPath();
+
+        setTarget(commandQueue.pop());
+        while (true) {
+
+
+        }
     }
 
     return 0;

@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <vector>
+#include <math.h>
 #include <string>
 
 #define EPSILON 1e-6f
