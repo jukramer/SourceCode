@@ -143,7 +143,7 @@ void Motor::setPWM(float pwm)
 
 void Motor::setPWMRaw(int pwm)
 {
-    
+    ;
 }
 
 void Motor::update()
@@ -180,8 +180,6 @@ uint pwm_setup(uint gpio)
     gpio_set_function(gpio, GPIO_FUNC_PWM);
     uint slice = pwm_gpio_to_slice_num(gpio);
     pwm_set_enabled(slice, true);
-    pwm_set_wrap(slice, 255); // 8-bit PWM
-    return slice;
 }
 
 void pico_led_init()
@@ -240,10 +238,10 @@ void global_init()
 {
     stdio_init_all();
 
-    while (!stdio_usb_connected())
-    {
-        sleep_ms(1000);
-    }
+    // while (!stdio_usb_connected())
+    // {
+    //     sleep_ms(1000);
+    // }
 
     //
     // Turn on LEDs

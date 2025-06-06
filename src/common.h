@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <vector>
+#include <math.h>
 #include <string>
 
 #define EPSILON 1e-6f
@@ -22,7 +23,6 @@ using byte = uint8_t;
 #define STATE_MAP_EXPLORE_BACK 3
 #define STATE_FAST_RUN 5
 
-
 inline volatile byte STATE = STATE_IDLE; // Global state of the mouse
 
 enum Direction
@@ -34,17 +34,26 @@ enum Direction
     BLOCKED = 99
 };
 
-struct Point {
+struct Point
+{
     float x;
     float y;
 };
 
-struct Command {
+struct Command
+{
     std::string action; // "FWD", "TRN", "STOP"
     float value;        // cells for FWD, radians for TRN (positive for left)
 };
 
-enum MovementType { FWD, TURN_L, TURN_R, STOP_CMD, IDLE };
+enum MovementType
+{
+    FWD,
+    TURN_L,
+    TURN_R,
+    STOP_CMD,
+    IDLE
+};
 
 constexpr Direction OPPOSITE[4] = {BOTTOM, LEFT, TOP, RIGHT};
 constexpr Direction ROTATE_LEFT[4] = {LEFT, TOP, RIGHT, BOTTOM};
@@ -91,7 +100,6 @@ public:
     }
 };
 
-std::string fastestPath(int floodMatrix);
 
 // Ring buffer queue for flood fill
 template <typename T>
@@ -105,6 +113,8 @@ struct Queue
     force_inline void push(T p) { buffer[head++ & 255] = p; }
     force_inline T pop() { return buffer[tail++ & 255]; }
 };
+
+Queue<Command> fastestPath();
 
 struct StatePrediction
 {
@@ -129,7 +139,6 @@ struct Cell
     };
 };
 
-
 struct Pose
 {
     float x;     // mm
@@ -148,12 +157,12 @@ struct Vec2f
 
     constexpr Vec2f(float x_ = 0.0f, float y_ = 0.0f) : x(x_), y(y_) {}
 
-    constexpr float norm() const
+    float norm() const
     {
         return sqrtf(x * x + y * y);
     }
 
-    constexpr Vec2f normalized() const
+    Vec2f normalized() const
     {
         float n = norm();
         if (n < EPSILON)

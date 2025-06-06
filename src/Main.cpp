@@ -2,7 +2,7 @@
 #include "API.h"
 #include "particles.h"
 
-#include <string.h>
+#include <string>
 #include <vector>
 #include <random>
 #include <time.h>
@@ -141,6 +141,9 @@ Motor MotorL(Motor_Choice::LEFT);
 Motor MotorR(Motor_Choice::RIGHT);
 
 using string = const char *;
+
+
+
 
 void motorTest(Motor &Motor)
 {
@@ -684,7 +687,7 @@ bool wall_front()
 {
     if (MM_VALID[TOF_FRONT_IDX] && MM[TOF_FRONT_IDX] < (1.5 * CELL_SIZE_MM))
     {
-        printf("Front wall detected at %.1dmm\n", MM[TOF_FRONT_IDX]);
+        printf("Front wall detected at %dmm\n", MM[TOF_FRONT_IDX]);
         return true;
     }
     else
@@ -697,7 +700,7 @@ bool wall_front()
 bool wall_left() {
     if (MM_VALID[TOF_LEFT_DIAG_IDX] && MM[TOF_LEFT_DIAG_IDX] < (1.5 * 1.41 * CELL_SIZE_MM / 2))
     {
-        printf("Left wall detected at %.1dmm\n", MM[TOF_LEFT_DIAG_IDX]);
+        printf("Left wall detected at %dmm\n", MM[TOF_SIDE_LEFT_IDX]);
         return true;
     }
     else
@@ -710,7 +713,7 @@ bool wall_left() {
 bool wall_right() {
     if (MM_VALID[TOF_RIGHT_DIAG_IDX] && MM[TOF_RIGHT_DIAG_IDX] < (1.5 * 1.41 * CELL_SIZE_MM / 2))
     {
-        printf("Right wall detected at %.1fmm\n", MM[TOF_RIGHT_DIAG_IDX]);
+        printf("Right wall detected at %dmm\n", MM[TOF_SIDE_RIGHT_IDX]);
         return true;
     }
     else
@@ -777,28 +780,35 @@ bool atCellBoundary() {
     return at_boundary;
 }
 
-int main()
-{
+int main() {
+    printf("In main!\n");
     global_init();
-
-    /*while (true)
+    printf("Inited!\n");
+    parse_maze_string(MAZE_ASCII_ART);
+    printf("Parsed!\n");
+    for (int r = 0; r < MAZE_SIZE; ++r)
     {
-        if (stdio_usb_connected())
+        for (int c = 0; c < MAZE_SIZE; ++c)
         {
-            printf("---------- TESTING LEFT MOTOR -----------");
-            motorTest(MotorL);
-
-            printf("---------- TESTING RIGHT MOTOR -----------");
-            motorTest(MotorR);
+            MOVE_MATRIX[r][c] = 255;
+            if (MAZE_MATRIX[r][c].north)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::TOP);
+            }
+            if (MAZE_MATRIX[r][c].south)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::BOTTOM);
+            }
+            if (MAZE_MATRIX[r][c].west)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::LEFT);
+            }
+            if (MAZE_MATRIX[r][c].east)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::RIGHT);
+            }
         }
-        else
-        {
-            MotorR.setPWM(0);
-            MotorL.setPWM(0);
-        }
-    }*/
-
-    // parse_maze_string(MAZE_ASCII_ART);
+    }
 
     for (int r = 0; r < MAZE_SIZE; ++r)
     {
@@ -829,6 +839,58 @@ int main()
     //Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -PI/2}, Command{"FWD", 2}, Command{"STOP", 0}};
     // Queue commandQueue = {Command{"FWD", 1}, Command{"FWD", 1}, Command{"FWD", 1}, Command{"FWD", 1}, Command{"FWD", 1}, Command{"TRN", -PI/2}, Command{"STOP", 0}};
     Queue commandQueue = {Command{"FWD", 5}, Command{"STOP", 0}};
+
+    floodFill();
+
+    printf("Finding fastest path...\n");
+    Queue<Command> path = fastestPath();
+    printf("Fastest path found!\n");
+    Queue<Command> pathPrint = path;
+
+    printf("Attempting to print path...\n");
+    while (!pathPrint.empty()) {
+        Command command = pathPrint.pop();
+        printf("%s, %f\n", command.action.c_str(), command.value);
+    }
+
+    STATE = STATE_FAST_RUN;
+
+    // while (true) {
+    //     MotorL.setPWM(50);
+    //     MotorR.setPWM(50);
+    //     MotorL.update();
+    //     MotorR.update();
+    //     sleep_ms(1000);
+    //     MotorL.setPWM(0);
+    //     MotorR.setPWM(0);
+    //     MotorL.update();
+    //     MotorR.update();
+    //     sleep_ms(5000);
+    // }
+
+    // while (true)
+    // {
+    //     if (stdio_usb_connected())
+    //     {
+    //         printf("---------- TESTING LEFT MOTOR -----------");
+    //         motorTest(MotorL);
+
+    //         printf("---------- TESTING RIGHT MOTOR -----------");
+    //         motorTest(MotorR);
+    //     }
+    //     else
+    //     {
+    //         MotorR.setPWM(0);
+    //         MotorL.setPWM(0);
+    //     }
+    // }
+
+    //parse_maze_string(MAZE_ASCII_ART);
+    
+    print_maze();
+
+    Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -PI/2}, Command{"FWD", 2}, Command{"STOP", 0}};
+    // Queue commandQueue = {Command{"FWD", 1},  Command{"STOP", 0}};
 
     POSE.x = 80.0; // Start at the center of the first cell
     POSE.y = 90.0; // Start at the center of the first cell
@@ -1008,9 +1070,21 @@ int main()
               targetReached, static_cast<int>(currentMovement), w_ref_stanley_radps, duty_L_percent, duty_R_percent);*/
         }
     }
+    
+    if (STATE = STATE_FAST_RUN) {
+        // Init fastest path 
+        floodFill();
+        commandQueue = fastestPath();
+
+        setTarget(commandQueue.pop());
+        while (true) {
+
+
+        }
+    }
 
     return 0;
-}
+} 
 
 /*
 
