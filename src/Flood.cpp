@@ -1,9 +1,8 @@
 #include "API.h"
 #include <tuple>
-#include <iostream>
 
-#define PI 3.14159265358979323846f // Define PI constant
-
+#include <string>
+#include <algorithm>
 
 force_inline bool isUnvisited(int x, int y)
 {
@@ -58,7 +57,7 @@ void printMaze()
         for (int x = 0; x < N; x++)
         {
             printf(" ");
-            if (MAZE_MATRIX[y][x].north)
+            if (MAZE_MATRIX[y][x].top)
                 printf("---");
             else
                 printf("   ");
@@ -68,16 +67,16 @@ void printMaze()
         // Side walls + spaces
         for (int x = 0; x < N; x++)
         {
-            if (MAZE_MATRIX[y][x].west)
+            if (MAZE_MATRIX[y][x].left)
                 printf("|");
             else
                 printf(" ");
 
-            printf("%3d", (int)FLOOD_MATRIX[y][x]);
+            printf("%3d", (int) FLOOD_MATRIX[y][x]);
         }
 
         // Right wall of the last cell
-        if (MAZE_MATRIX[y][N - 1].east)
+        if (MAZE_MATRIX[y][N - 1].right)
             printf("|\n");
         else
             printf(" \n");
@@ -87,7 +86,7 @@ void printMaze()
     for (int x = 0; x < N; x++)
     {
         printf(" ");
-        if (MAZE_MATRIX[N - 1][x].south)
+        if (MAZE_MATRIX[N - 1][x].bottom)
             printf("---");
         else
             printf("   ");
@@ -95,14 +94,12 @@ void printMaze()
     printf(" \n");
 }
 
+
 void floodFill()
 {
     auto begin = time_us_64();
 
-    STATE = STATE_MAP_EXPLORE;
-
     CURRENT_FLOOD_GEN++;
-    floodQueue.reset();
 
     // Set high value
     for (int i; i < 15; i++)
@@ -116,7 +113,7 @@ void floodFill()
         }
     }
 
-    // printMaze();
+    floodQueue.reset();
 
     if (STATE == STATE_MAP_EXPLORE)
     {
@@ -163,6 +160,7 @@ void floodFill()
         int dist = FLOOD_MATRIX[y][x];
 
         uint8_t mask = MOVE_MATRIX[y][x];
+        // printf("Current cell (%d, %d) with distance %d and mask %02X\n", x, y, dist, mask);
         tryPropagate(0, x, y, dist, mask);
         tryPropagate(1, x, y, dist, mask);
         tryPropagate(2, x, y, dist, mask);
@@ -171,63 +169,14 @@ void floodFill()
 
     auto end = time_us_64();
     auto duration = (end - begin) / 1000.0f;
-    printf("Flood fill completed in %.2f ms, processed %d cells.\n", duration, c);
-
-    // print_maze();
+    
+    //printf("Flood fill completed in %.2f ms, processed %d cells.\n", duration, c);
 }
 
-struct CellCoord
-{
-    int C;
-    int R;
-
-    CellCoord operator+(const CellCoord c2) const
-    {
-        CellCoord result;
-        result.C = C + c2.C;
-        result.R = R + c2.R;
-
-        return result;
-    }
-
-    CellCoord operator-(const CellCoord c2) const
-    {
-        CellCoord result;
-        result.C = C - c2.C;
-        result.R = R - c2.R;
-
-        return result;
-    }
-};
-
-#include <string>
-#include <algorithm>
-
-// Enum for mouse heading
-enum class Heading
-{
-    NORTH,
-    EAST,
-    SOUTH,
-    WEST
-};
-
-// Function to check if a cell is a goal cell
-bool isGoalCell(int x, int y)
-{
-    return (x == 7 && y == 7) || (x == 8 && y == 7) ||
-           (x == 7 && y == 8) || (x == 8 && y == 8);
-}
-
-// Function to find the fastest path from {0,15} to a goal cell
-
-
-Queue<Command> fastestPath() {
+Queue<Command> fastestPath(Location currentCell, Direction currentDir, int max_N) {
     // Fastest path solely based on floodfill distance
     Queue<Command> path;
 
-    Location currentCell = {0, 15};
-    Direction currentDir = Direction::TOP;
     float n = 0;
     // Initial point
     for (int i = 0; i < 100; i++)
@@ -256,7 +205,7 @@ Queue<Command> fastestPath() {
 
         // std::cout << currentDir << " " << minFloodFillDir << std::endl;
         // Append path depending on relative dir of next cell and mouse
-        if (currentDir == minFloodFillDir)
+        if (currentDir == minFloodFillDir && n < max_N)
         {
             n++;
             // std::cout << "Pushing F..." << std::endl;
@@ -290,6 +239,11 @@ Queue<Command> fastestPath() {
             // std::cout << "Breaking" << std::endl;
             break;
         }
+    }
+
+    if (n != 0) {
+        path.push(Command {"FWD", n});
+        n = 0;
     }
     path.push(Command {"STOP", 0.0});
 

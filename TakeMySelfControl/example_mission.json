@@ -3,7 +3,7 @@
     "wasd_move_pwm": 100,
     "wasd_turn_pwm": 60.0,
     "wheel_radius": 2.1,
-    "wheel_base": 8.0,
+    "wheel_base": 9.0,
     "directory": "C:/Users/justa/OneDrive/Desktop/MicroMouse/SourceCode",
     "run_command": ".\\build\\Main.exe",
     "build_command": "build_debug.bat",

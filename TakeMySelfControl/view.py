@@ -27,6 +27,7 @@ class Tab(tab.Tab):
                 self.uber.mission.reset_pos_y,
                 self.uber.mission.reset_pos_theta
             )
+            self.uber.pg_renderer.walls_seen_aabbs.clear()
 
         reset_button = QPushButton("Reset")
         reset_button.clicked.connect(reset)

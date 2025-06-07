@@ -38,6 +38,13 @@
     "raspberry-pi-pico.cmakePath": "${HOME}/.pico-sdk/cmake/v3.31.5/bin/cmake",
     "raspberry-pi-pico.ninjaPath": "${HOME}/.pico-sdk/ninja/v1.12.1/ninja",
     "files.associations": {
-        "quadrature_encoder_substep.pio.h": "c"
+        "*.page-template": "vue",
+        "*.layout-template": "vue",
+        "*.vue": "vue",
+        "ios": "cpp",
+        "queue": "cpp",
+        "__locale": "cpp",
+        "stdexcept": "cpp",
+        "string": "cpp"
     }
 }

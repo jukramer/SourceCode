@@ -37,8 +37,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(SourceCode src/Main.cpp src/functions.cpp src/Flood.cpp src/API_Actual.cpp src/drivers/vl6180x.cpp src/drivers/driver_mpu6500.c src/drivers/driver_mpu6500_fifo.c src/drivers/driver_mpu6500_interface.c src/drivers/vl53l1x.cpp)
-# pico_generate_pio_header(SourceCode  ${CMAKE_CURRENT_LIST_DIR}/src/quadrature_encoder_substep.pio)
+add_executable(SourceCode src/Main.cpp src/Flood.cpp src/functions.cpp src/API_Actual.cpp src/drivers/vl6180x.cpp src/drivers/driver_mpu6500.c src/drivers/driver_mpu6500_fifo.c src/drivers/driver_mpu6500_interface.c src/drivers/vl53l1x.cpp)
 
 target_compile_definitions(SourceCode PRIVATE EIGEN_NO_DEBUG=1 EIGEN_NO_EXCEPTIONS)
 target_include_directories(SourceCode PRIVATE ${CMAKE_CURRENT_LIST_DIR}/eigen)

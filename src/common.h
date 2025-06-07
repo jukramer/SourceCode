@@ -56,7 +56,7 @@ enum MovementType
 };
 
 constexpr Direction OPPOSITE[4] = {BOTTOM, LEFT, TOP, RIGHT};
-constexpr Direction LEFT_FROM[4] = {LEFT, TOP, RIGHT, BOTTOM};
+constexpr Direction ROTATE_LEFT[4] = {LEFT, TOP, RIGHT, BOTTOM};
 constexpr Direction ROTATE_RIGHT[4] = {RIGHT, BOTTOM, LEFT, TOP};
 
 #define MAZE_SIZE 16
@@ -114,13 +114,7 @@ struct Queue
     force_inline T pop() { return buffer[tail++ & 255]; }
 };
 
-Queue<Command> fastestPath();
-
-enum WallState
-{
-    EXIT = 0, // a wall that has been seen and confirmed absent
-    WALL = 1, // a wall that has been seen and confirmed present
-};
+Queue<Command> fastestPath(Location currentCell = {0, 15}, Direction currentDir = Direction::TOP, int max_N = 100);
 
 struct StatePrediction
 {
@@ -135,11 +129,11 @@ struct Cell
     {
         struct
         {
-            WallState north : 1; // 1 bit for the north wall
-            WallState east : 1;  // 1 bit for the east wall
-            WallState south : 1; // 1 bit for the south wall
-            WallState west : 1;  // 1 bit for the west wall
-            bool visited : 1;    // 1 bit for visited status
+            byte top : 1;  // 1 bit for the north wall
+            byte right : 1;   // 1 bit for the east wall
+            byte bottom : 1;  // 1 bit for the south wall
+            byte left : 1;   // 1 bit for the west wall
+            bool visited : 1;     // 1 bit for visited status
         };
         byte walls;
     };
@@ -212,4 +206,19 @@ constexpr Vec2f OFFSET_VECTORS[4] = {
 #define BACKWARD -1
 
 #define WHEEL_RADIUS_MM 22
-#define WHEEL_BASE_MM 80
+#define WHEEL_BASE_MM 90
+#define CELL_SIZE_MM 180.0f
+
+#define SENSOR_NOISE_STDDEV 5.0f
+#define SENSOR_NOISE_VAR (SENSOR_NOISE_STDDEV * SENSOR_NOISE_STDDEV)
+
+#define DEFAULT_MAX_SENSOR_RANGE_MM 255.0f
+#define FRONT_MAX_SENSOR_RANGE_MM (10.0f * 255.0f)
+
+#define LOCAL_TOF_BASE_OFFSET_X_MM 5.0f // Offset along robot's local X-axis
+#define LOCAL_TOF_RADIAL_OFFSET_MM 25.0f // Additional radial offset for each sensor
+
+#define WALL_THICKNESS_MM 12.0f // Wall thickness in mm
+
+#define PI 3.14159265358979323846f // Define PI constant
+

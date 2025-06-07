@@ -360,7 +360,8 @@ class TakeMySelfControl(QMainWindow):
                         except ValueError as e:
                             output_buffer.append(f">>> Invalid wall data: {e}\n")
                             return
-                        self.pg_renderer.set_wall_seen(x, y, direction)
+                        print(f"Setting wall at ({x}, {y}) in direction {direction}")
+                        self.pg_renderer.set_wall_seen(x, 15 - y, direction)
                         return
                     elif command == "readIMU":
                         AX = 0.0
@@ -383,6 +384,34 @@ class TakeMySelfControl(QMainWindow):
                                 output_buffer.append(f">>> Invalid particle data: {parts[i:i+3]}\n")
                                 break
                         self.pg_renderer.set_particles(particles)
+                    elif command == "vizPOSE":
+                        if len(parts) < 5:
+                            output_buffer.append(f">>> Error parsing vizPOSE command: {line.strip()}\n")
+                            return
+                        
+                        try:
+                            x = float(parts[2]) / 10  # Convert to cm
+                            y = float(parts[3]) / 10  # Convert to cm
+                            theta = float(parts[4])
+                        except ValueError:
+                            output_buffer.append(f">>> Invalid pose data: {parts[2:5]}\n")
+                            return
+                        
+                        self.pg_renderer.set_viz_pose(x, y, theta)
+                    elif command == "vizTARGET":
+                        if len(parts) < 5:
+                            output_buffer.append(f">>> Error parsing vizTARGET command: {line.strip()}\n")
+                            return
+                        
+                        try:
+                            x = float(parts[2]) / 10  # Convert to cm
+                            y = float(parts[3]) / 10  # Convert to cm
+                            theta = float(parts[4])
+                        except ValueError:
+                            output_buffer.append(f">>> Invalid target data: {parts[2:5]}\n")
+                            return
+                        
+                        self.pg_renderer.set_viz_target(x, y, theta)
                     else:
                         output_buffer.append(f"Unknown command: {line.strip()}\n")
                         return                             

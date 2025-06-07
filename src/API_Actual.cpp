@@ -103,8 +103,8 @@ Motor::Motor(Motor_Choice choice)
     gpio_set_dir(pinENC2, GPIO_IN);
     gpio_pull_up(pinENC2);
 
-    gpio_set_irq_enabled_with_callback(pinENC, GPIO_IRQ_EDGE_RISE, true, callback);
-    irq_set_enabled(IO_IRQ_BANK0, true);
+    // gpio_set_irq_enabled_with_callback(pinENC, GPIO_IRQ_EDGE_RISE, true, callback);
+    // irq_set_enabled(IO_IRQ_BANK0, true);
 }
 
 void Motor::setPWM(float pwm) {
@@ -183,9 +183,7 @@ uint pwm_setup(uint gpio)
     uint slice = pwm_gpio_to_slice_num(gpio);
     printf("Slice set!\n");
     pwm_set_enabled(slice, true);
-    printf("Finished init!\n");
-
-    return 0;
+`    return slice;  // <-- Proper return
 }
 
 void pico_led_init()
@@ -306,7 +304,7 @@ void global_init()
     gpio_set_dir(imuIntPin, GPIO_IN);
     gpio_pull_up(imuIntPin); // optional, depending on your MPU circuit
 
-    gpio_set_irq_enabled_with_callback(imuIntPin, GPIO_IRQ_EDGE_FALL, true, &imu_int);
+    // gpio_set_irq_enabled_with_callback(imuIntPin, GPIO_IRQ_EDGE_FALL, true, &imu_int);
 
     if (0 != mpu6500_fifo_init(MPU6500_INTERFACE_IIC, (mpu6500_address_t)0x68)) // Default address for MPU6500
     {
@@ -376,7 +374,11 @@ void global_init()
     }
     TOF_XL.setAddress(0x4A);
 
-    printf("Initting motor pins...\n");
+    gpio_set_irq_enabled_with_callback(0, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false, NULL);
+    gpio_set_irq_enabled_with_callback(spdAPin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false, NULL);
+    gpio_set_irq_enabled_with_callback(spdBPin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false, NULL);
+    irq_set_enabled(IO_IRQ_BANK0, false);
+
     gpio_init(dirA1Pin);
     printf("Initting motor pins...\n");
     gpio_set_dir(dirA1Pin, GPIO_OUT);
@@ -384,7 +386,9 @@ void global_init()
     gpio_init(dirA2Pin);
     printf("Initting motor pins...\n");
     gpio_set_dir(dirA2Pin, GPIO_OUT);
+    printf("Setting up PWM for left motor on pin %d\n", spdAPin);
     pwm_setup(spdAPin);
+    printf("finished setting up PWM for left motor\n");
 
     gpio_init(dirB1Pin);
     printf("Initting motor pins...\n");
@@ -393,9 +397,9 @@ void global_init()
     gpio_init(dirB2Pin);
     printf("Initting motor pins...dirb2 done\n");
     gpio_set_dir(dirB2Pin, GPIO_OUT);
-    printf("Initting motor pins...\n");
+    printf("Setting up PWM for right motor on pin %d\n", spdBPin);
     pwm_setup(spdBPin);
-    printf("Start ranging...\n");
+    printf("finished setting up PWM for right motor\n");
 
     //
     // Start TOF continuous ranging
