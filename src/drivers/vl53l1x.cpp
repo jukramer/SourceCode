@@ -106,6 +106,7 @@ bool VL53L1X::init(bool io_2v8)
     writeReg16Bit(ALGO__PART_TO_PART_RANGE_OFFSET_MM,
                   readReg16Bit(MM_CONFIG__OUTER_OFFSET_MM) * 4);
 
+    printf("VL53L1X Init complete.\n");
     return true;
 }
 

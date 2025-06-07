@@ -107,8 +107,7 @@ Motor::Motor(Motor_Choice choice)
     irq_set_enabled(IO_IRQ_BANK0, true);
 }
 
-void Motor::setPWM(float pwm)
-{
+void Motor::setPWM(float pwm) {
     printf("Setting PWM...\n");
 
     pwm = fmaxf(fminf(pwm, 100.0f), -100.0f); // Cap PWM to [-100, 100]
@@ -138,6 +137,7 @@ void Motor::setPWM(float pwm)
     {
         printf("Invalid PWM calculated...\n");
     }
+    printf("Writing %d to pin %d\n", actualPWM, pinPWM);
     analogWrite(pinPWM, actualPWM);
 }
 
@@ -177,9 +177,15 @@ void Motor::update()
 
 uint pwm_setup(uint gpio)
 {
+    printf("Beginning setup!\n");
     gpio_set_function(gpio, GPIO_FUNC_PWM);
+    printf("Function set!\n");
     uint slice = pwm_gpio_to_slice_num(gpio);
+    printf("Slice set!\n");
     pwm_set_enabled(slice, true);
+    printf("Finished init!\n");
+
+    return 0;
 }
 
 void pico_led_init()
@@ -238,10 +244,10 @@ void global_init()
 {
     stdio_init_all();
 
-    // while (!stdio_usb_connected())
-    // {
-    //     sleep_ms(1000);
-    // }
+    while (!stdio_usb_connected())
+    {
+        sleep_ms(1000);
+    }
 
     //
     // Turn on LEDs
@@ -347,6 +353,7 @@ void global_init()
 
     int retryCount = 0;
 
+    TOF_XL.setAddress(0x29);
     while (!TOF_XL.init(true))
     {
         sleep_ms(1);
@@ -369,17 +376,26 @@ void global_init()
     }
     TOF_XL.setAddress(0x4A);
 
+    printf("Initting motor pins...\n");
     gpio_init(dirA1Pin);
+    printf("Initting motor pins...\n");
     gpio_set_dir(dirA1Pin, GPIO_OUT);
+    printf("Initting motor pins...\n");
     gpio_init(dirA2Pin);
+    printf("Initting motor pins...\n");
     gpio_set_dir(dirA2Pin, GPIO_OUT);
     pwm_setup(spdAPin);
 
     gpio_init(dirB1Pin);
+    printf("Initting motor pins...\n");
     gpio_set_dir(dirB1Pin, GPIO_OUT);
+    printf("Initting motor pins... dirb2\n");
     gpio_init(dirB2Pin);
+    printf("Initting motor pins...dirb2 done\n");
     gpio_set_dir(dirB2Pin, GPIO_OUT);
+    printf("Initting motor pins...\n");
     pwm_setup(spdBPin);
+    printf("Start ranging...\n");
 
     //
     // Start TOF continuous ranging
@@ -392,6 +408,8 @@ void global_init()
     {
         TOF_XS[i].startRangeContinuous(50);
     }
+
+    printf("global_init complete...\n");
 }
 
 #define LOG 1

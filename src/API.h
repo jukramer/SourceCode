@@ -49,6 +49,7 @@ enum class TOF_Direction
     COUNT
 };
 
+
 #define NUM_TOF_SENSORS ((int) TOF_Direction::COUNT)
 
 void global_init();

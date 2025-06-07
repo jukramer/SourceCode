@@ -1,11 +1,14 @@
 #include "API.h"
 #include "common.h"
+#include "pins.hpp"
 #include <string>
+#include "hardware/pwm.h"
 #include <vector>
 #include <random>
 #include <time.h>
 #include "linalg.h"
 #include <math.h>
+// #include "quadrature_encoder_substep.pio.h"
 
 #define PI 3.14159265358979323846f // Define PI constant
 
@@ -348,9 +351,6 @@ Motor MotorL(Motor_Choice::LEFT);
 Motor MotorR(Motor_Choice::RIGHT);
 
 using string = const char *;
-
-
-
 
 void motorTest(Motor &Motor)
 {
@@ -1210,11 +1210,18 @@ bool wall_right() {
 }
 
 int main() {
-    printf("In main!\n");
     global_init();
-    printf("Inited!\n");
+    printf("Parsing maze!\n");
+
+    while (!stdio_usb_connected()) {
+        sleep_ms(1000);
+    }
+    
+    uint slice = pwm_gpio_to_slice_num(7);
+    pwm_set_chan_level(slice, pwm_gpio_to_channel(7), 255);
+
     parse_maze_string(MAZE_ASCII_ART);
-    printf("Parsed!\n");
+
     for (int r = 0; r < MAZE_SIZE; ++r)
     {
         for (int c = 0; c < MAZE_SIZE; ++c)
@@ -1239,22 +1246,39 @@ int main() {
         }
     }
 
-    print_maze();
+    
 
-    floodFill();
+    // MotorL.setPWM(100);
+    // MotorR.setPWM(100);
 
-    printf("Finding fastest path...\n");
-    Queue<Command> path = fastestPath();
-    printf("Fastest path found!\n");
-    Queue<Command> pathPrint = path;
-
-    printf("Attempting to print path...\n");
-    while (!pathPrint.empty()) {
-        Command command = pathPrint.pop();
-        printf("%s, %f\n", command.action.c_str(), command.value);
+    while (true) {
+        if (stdio_usb_connected()) {
+            motorTest(MotorL);
+            motorTest(MotorR);
+        }
     }
 
-    STATE = STATE_FAST_RUN;
+    // substep_state_t state;
+    // printf("State initialized!\n");
+
+    // PIO pio = pio0;
+    // uint offset = pio_add_program(pio, &quadrature_encoder_substep_program);
+    // const uint sm = 0;
+    // substep_init_state(pio, sm, mrencPin, &state);
+    // printf("Initted!\n");
+
+    // quadrature_encoder_substep_program_init(pio, sm, mrencPin);
+
+    // while (true) {
+    //     printf("Setting rpm...\n");
+    //     MotorR.setPWM(100);
+    //     substep_update(&state);
+    //     printf("%d\n", state.speed);
+    
+    // }
+    // print_maze();
+
+    // floodFill();
 
     // while (true) {
     //     MotorL.setPWM(50);
@@ -1452,8 +1476,6 @@ int main() {
 
         setTarget(commandQueue.pop());
         while (true) {
-
-
         }
     }
 
