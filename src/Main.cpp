@@ -6,6 +6,7 @@
 #include <vector>
 #include <random>
 #include <time.h>
+#include <string.h>
 #include "linalg.h"
 #include <math.h>
 
@@ -23,8 +24,8 @@
 
 // Maze and Robot Dimensions (all in millimeters or radians)
 #define CELL_WIDTH 180.0f                   // mm
-#define V_MAX 100.0f                        // mm/s (Reduced V_MAX for more stable testing initially)
-#define TURN_RADIUS (CELL_WIDTH)     // mm
+#define V_MAX 200.0f                        // mm/s (Reduced V_MAX for more stable testing initially)
+#define TURN_RADIUS (CELL_WIDTH / 2)        // mm
 #define W_MAX_NOMINAL (V_MAX / TURN_RADIUS) // Nominal angular velocity for turns (rad/s)
 
 float normalize_angle_pi_pi(float angle_rad)
@@ -92,7 +93,6 @@ public:
     }
 };
 
-
 class WController
 {
 public:
@@ -141,9 +141,6 @@ Motor MotorL(Motor_Choice::LEFT);
 Motor MotorR(Motor_Choice::RIGHT);
 
 using string = const char *;
-
-
-
 
 void motorTest(Motor &Motor)
 {
@@ -246,7 +243,7 @@ void setTargetSmooth(Command command)
         TARGET_CELL_X = CELL_X + OFFSET_LOCATIONS[dir_index].x * cells_forward;
         TARGET_CELL_Y = CELL_Y + OFFSET_LOCATIONS[dir_index].y * cells_forward;
 
-        targetPose.theta = POSE.theta;
+        targetPose.theta = direction_to_theta(dir);
         targetPose.v = V_MAX;
         targetPose.w = 0.0f;
 
@@ -260,16 +257,19 @@ void setTargetSmooth(Command command)
     else if (command.action == "TRN")
     {
         float turn_angle_rad = command.value; // radians, positive for left (CCW)
-    
+
         // Center of current cell, nudged by half a cell in turn direction
         Direction dir = theta_to_direction(POSE.theta);
         int dir_index = static_cast<int>(dir);
-        
+
         Direction dir_after;
-        if (turn_angle_rad > 0) {
+        if (turn_angle_rad > 0)
+        {
             currentMovement = TURN_L;
             dir_after = ROTATE_LEFT[dir_index];
-        } else {
+        }
+        else
+        {
             currentMovement = TURN_R;
             dir_after = ROTATE_RIGHT[dir_index];
         }
@@ -277,7 +277,7 @@ void setTargetSmooth(Command command)
 
         targetPose.theta = normalize_angle_pi_pi(direction_to_theta(dir) + turn_angle_rad);
 
-        targetPose.v = V_MAX * 0.8f; 
+        targetPose.v = V_MAX * 0.8f;
         targetPose.w = (turn_angle_rad > 0 ? W_MAX_NOMINAL : -W_MAX_NOMINAL) * 0.8f;
 
         TARGET_CELL_X = CELL_X + OFFSET_LOCATIONS[static_cast<int>(dir_after)].x;
@@ -286,28 +286,32 @@ void setTargetSmooth(Command command)
         targetPose.x = TARGET_CELL_X * CELL_SIZE_MM + (dir == Direction::LEFT ? CELL_SIZE_MM : 0);
         targetPose.y = (15 - TARGET_CELL_Y) * CELL_SIZE_MM + (dir == Direction::BOTTOM ? CELL_SIZE_MM : 0);
 
-        if (dir_after == Direction::RIGHT) {
-            //targetPose.x += LOCAL_TOF_BASE_OFFSET_X_MM;
+        if (dir_after == Direction::RIGHT)
+        {
+            // targetPose.x += LOCAL_TOF_BASE_OFFSET_X_MM;
             targetPose.y += CELL_SIZE_MM / 2.0f; // Center in cell
         }
-        if (dir_after == Direction::LEFT) {
-            //targetPose.x -= LOCAL_TOF_BASE_OFFSET_X_MM;
+        if (dir_after == Direction::LEFT)
+        {
+            // targetPose.x -= LOCAL_TOF_BASE_OFFSET_X_MM;
             targetPose.y += CELL_SIZE_MM / 2.0f; // Center in cell
         }
-        if (dir_after == Direction::TOP) {
+        if (dir_after == Direction::TOP)
+        {
             targetPose.x += CELL_SIZE_MM / 2.0f; // Center in cell
-            //targetPose.y += LOCAL_TOF_BASE_OFFSET_X_MM / 2;
+            // targetPose.y += LOCAL_TOF_BASE_OFFSET_X_MM / 2;
         }
-        if (dir_after == Direction::BOTTOM) {
+        if (dir_after == Direction::BOTTOM)
+        {
             targetPose.x += CELL_SIZE_MM / 2.0f; // Center in cell
             targetPose.y += CELL_SIZE_MM / 2.0f; // Adjust for local sensor offset
-            //targetPose.y -= LOCAL_TOF_BASE_OFFSET_X_MM;
+            // targetPose.y -= LOCAL_TOF_BASE_OFFSET_X_MM;
         }
     }
     else if (command.action == "STOP")
     {
         currentMovement = STOP_CMD;
-        
+
         targetPose.v = 0.0f;
         targetPose.w = 0.0f;
 
@@ -343,29 +347,32 @@ void setTarget(Command command)
         TARGET_CELL_X = CELL_X + OFFSET_LOCATIONS[dir_index].x * cells_forward;
         TARGET_CELL_Y = CELL_Y + OFFSET_LOCATIONS[dir_index].y * cells_forward;
 
-        targetPose.theta = POSE.theta;
+        targetPose.theta = direction_to_theta(dir);
         targetPose.v = V_MAX;
-        targetPose.w = 0.0f;
+        targetPose.w = 0;
 
         targetPose.x = TARGET_CELL_X * CELL_SIZE_MM + CELL_SIZE_MM / 2.0f;
         targetPose.y = (15 - TARGET_CELL_Y) * CELL_SIZE_MM + CELL_SIZE_MM / 2.0f;
 
-        // targetPose.x -= (CELL_SIZE_MM / 2.0f + LOCAL_TOF_BASE_OFFSET_X_MM) * OFFSET_LOCATIONS[dir_index].x;
-        // targetPose.y += (CELL_SIZE_MM / 2.0f + LOCAL_TOF_BASE_OFFSET_X_MM) * OFFSET_LOCATIONS[dir_index].y;
+        // targetPose.x += (LOCAL_TOF_BASE_OFFSET_X_MM / 3) * OFFSET_LOCATIONS[dir_index].x;
+        // targetPose.y -= (LOCAL_TOF_BASE_OFFSET_X_MM / 3) * OFFSET_LOCATIONS[dir_index].y;
     }
     else if (command.action == "TRN")
     {
         float turn_angle_rad = command.value; // radians, positive for left (CCW)
-    
+
         // Center of current cell, nudged by half a cell in turn direction
         Direction dir = theta_to_direction(POSE.theta);
         int dir_index = static_cast<int>(dir);
-        
+
         Direction dir_after;
-        if (turn_angle_rad > 0) {
+        if (turn_angle_rad > 0)
+        {
             currentMovement = TURN_L;
             dir_after = ROTATE_LEFT[dir_index];
-        } else {
+        }
+        else
+        {
             currentMovement = TURN_R;
             dir_after = ROTATE_RIGHT[dir_index];
         }
@@ -373,16 +380,16 @@ void setTarget(Command command)
 
         targetPose.theta = normalize_angle_pi_pi(direction_to_theta(dir) + turn_angle_rad);
 
-        targetPose.v = V_MAX * 0.8f; 
-        targetPose.w = (turn_angle_rad > 0 ? W_MAX_NOMINAL : -W_MAX_NOMINAL) * 0.8f;
+        targetPose.v = 0; // V_MAX * 0.8f;
+        targetPose.w = (turn_angle_rad > 0 ? W_MAX_NOMINAL : -W_MAX_NOMINAL);
 
-        TARGET_CELL_X = CELL_X + OFFSET_LOCATIONS[static_cast<int>(dir_after)].x;
-        TARGET_CELL_Y = CELL_Y + OFFSET_LOCATIONS[static_cast<int>(dir_after)].y;
+        TARGET_CELL_X = CELL_X; // + OFFSET_LOCATIONS[static_cast<int>(dir_after)].x;
+        TARGET_CELL_Y = CELL_Y; // + OFFSET_LOCATIONS[static_cast<int>(dir_after)].y;
 
-        targetPose.x = TARGET_CELL_X * CELL_SIZE_MM + (dir == Direction::LEFT ? CELL_SIZE_MM : 0);
-        targetPose.y = (15 - TARGET_CELL_Y) * CELL_SIZE_MM + (dir == Direction::BOTTOM ? CELL_SIZE_MM : 0);
+        targetPose.x = POSE.x; // TARGET_CELL_X * CELL_SIZE_MM + (dir == Direction::LEFT ? CELL_SIZE_MM : 0);
+        targetPose.y = POSE.y; // (15 - TARGET_CELL_Y) * CELL_SIZE_MM + (dir == Direction::BOTTOM ? CELL_SIZE_MM : 0);
 
-        if (dir_after == Direction::RIGHT) {
+        /*if (dir_after == Direction::RIGHT) {
             //targetPose.x += LOCAL_TOF_BASE_OFFSET_X_MM;
             targetPose.y += CELL_SIZE_MM / 2.0f; // Center in cell
         }
@@ -398,12 +405,12 @@ void setTarget(Command command)
             targetPose.x += CELL_SIZE_MM / 2.0f; // Center in cell
             targetPose.y += CELL_SIZE_MM / 2.0f; // Adjust for local sensor offset
             //targetPose.y -= LOCAL_TOF_BASE_OFFSET_X_MM;
-        }
+        }*/
     }
     else if (command.action == "STOP")
     {
         currentMovement = STOP_CMD;
-        
+
         targetPose.v = 0.0f;
         targetPose.w = 0.0f;
 
@@ -420,7 +427,7 @@ void setTarget(Command command)
            targetPose.x, targetPose.y, targetPose.theta, targetPose.v, targetPose.w);
 }
 
-#define NUM_PARTICLES 1000
+#define NUM_PARTICLES 100
 
 Particle particles_a[NUM_PARTICLES] = {};
 Particle particles_b[NUM_PARTICLES] = {};
@@ -516,8 +523,8 @@ void localize_particles()
         }
     }
 
-    // printf("Resampling particles, valid sensors: %d, total weight: %.6f\n", valid_sensor_count, weight_sum);
-    if (valid_sensor_count > NUM_PARTICLES) {
+    if (weight_sum > 1e-6f && valid_sensor_count > 0)
+    {
         // Low-variance resampling
         float r = rand_uniform(0.0f, 1.0f) / NUM_PARTICLES;
         float c = particles[0].weight;
@@ -533,9 +540,10 @@ void localize_particles()
             }
             new_particles[m] = particles[i];
 
-            new_particles[m].pos.x += rand_gauss(0.0f, 2.0f);    // mm
-            new_particles[m].pos.y += rand_gauss(0.0f, 2.0f);    // mm
-            new_particles[m].rot_rad += rand_gauss(0.0f, 0.02f); // radians
+            // These noise values are critical for diversity after resampling.
+            new_particles[m].pos.x += rand_gauss(0.0f, 0.5f);    // mm (tune this)
+            new_particles[m].pos.y += rand_gauss(0.0f, 0.5f);    // mm (tune this)
+            new_particles[m].rot_rad += rand_gauss(0.0f, 0.02f); // radians (tune this)
         }
         std::swap(particles, new_particles);
     }
@@ -596,9 +604,9 @@ void motion_update(float dx, float dy, float drot)
             }
         }
 
-        float noise_x = rand_gauss(0.0f, 1.0f);    // mm
-        float noise_y = rand_gauss(0.0f, 1.0f);    // mm
-        float noise_rot = rand_gauss(0.0f, 0.01f); // radians
+        float noise_x = rand_gauss(0.0f, 0.1f);     // mm
+        float noise_y = rand_gauss(0.0f, 0.1f);     // mm
+        float noise_rot = rand_gauss(0.0f, 0.005f); // radians
 
         particles[i].pos.x = nx + noise_x;
         particles[i].pos.y = ny + noise_y;
@@ -663,10 +671,19 @@ bool checkTargetReached()
 
     if (currentMovement == FWD)
     {
-        dist_thresh_mm = 20.0f; // 20 mm
+        Direction dir = theta_to_direction(POSE.theta);
+        if (dir == Direction::RIGHT || dir == Direction::LEFT)
+        {
+            return abs(dx_mm) < 5.0f;
+        }
+        else
+        {
+            return abs(dy_mm) < 5.0f;
+        }
+        //dist_thresh_mm = 10.0f; // 20 mm
 
         // For FWD, primarily check distance. Angle is less critical once on path.
-        return dist_sq_mm < (dist_thresh_mm * dist_thresh_mm);
+        //return dist_sq_mm < (dist_thresh_mm * dist_thresh_mm);
     }
     else if (currentMovement == TURN_L || currentMovement == TURN_R)
     {
@@ -685,7 +702,7 @@ bool checkTargetReached()
 
 bool wall_front()
 {
-    if (MM_VALID[TOF_FRONT_IDX] && MM[TOF_FRONT_IDX] < (1.5 * CELL_SIZE_MM))
+    if (MM_VALID[TOF_FRONT_IDX] && MM[TOF_FRONT_IDX] < (1.2 * CELL_SIZE_MM))
     {
         printf("Front wall detected at %dmm\n", MM[TOF_FRONT_IDX]);
         return true;
@@ -697,8 +714,9 @@ bool wall_front()
     }
 }
 
-bool wall_left() {
-    if (MM_VALID[TOF_LEFT_DIAG_IDX] && MM[TOF_LEFT_DIAG_IDX] < (1.5 * 1.41 * CELL_SIZE_MM / 2))
+bool wall_left()
+{
+    if (MM_VALID[TOF_LEFT_DIAG_IDX] && MM[TOF_LEFT_DIAG_IDX] < (1.4 * 1.41 * CELL_SIZE_MM / 2))
     {
         printf("Left wall detected at %dmm\n", MM[TOF_SIDE_LEFT_IDX]);
         return true;
@@ -710,8 +728,9 @@ bool wall_left() {
     }
 }
 
-bool wall_right() {
-    if (MM_VALID[TOF_RIGHT_DIAG_IDX] && MM[TOF_RIGHT_DIAG_IDX] < (1.5 * 1.41 * CELL_SIZE_MM / 2))
+bool wall_right()
+{
+    if (MM_VALID[TOF_RIGHT_DIAG_IDX] && MM[TOF_RIGHT_DIAG_IDX] < (1.4 * 1.41 * CELL_SIZE_MM / 2))
     {
         printf("Right wall detected at %dmm\n", MM[TOF_SIDE_RIGHT_IDX]);
         return true;
@@ -723,28 +742,34 @@ bool wall_right() {
     }
 }
 
-void scanFrontWall() {
-    if (MM_VALID[TOF_FRONT_IDX]) {
-        if (direction_to_theta(theta_to_direction(POSE.theta)) - POSE.theta > 0.1f) {
+void scanFrontWall()
+{
+    if (MM_VALID[TOF_FRONT_IDX])
+    {
+        if (direction_to_theta(theta_to_direction(POSE.theta)) - POSE.theta > 0.1f)
+        {
             printf("Front wall scan skipped due to pose direction mismatch.\n");
             return;
         }
 
-        float front_distance_cells = round(MM[TOF_FRONT_IDX] / CELL_SIZE_MM);
+        float front_distance_cells = round((MM[TOF_FRONT_IDX] - LOCAL_TOF_BASE_OFFSET_X_MM) / CELL_SIZE_MM);
         Direction dir = theta_to_direction(POSE.theta);
         int cell_x = CELL_X + OFFSET_LOCATIONS[dir].x * front_distance_cells;
         int cell_y = CELL_Y + OFFSET_LOCATIONS[dir].y * front_distance_cells;
 
-        printf("Front wall detected at %.1d mm, cell (%d, %d)\n", MM[TOF_FRONT_IDX], cell_x, cell_y);
-        printf("Current pose: x=%.2fmm, y=%.2fmm, theta=%.1fdeg\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI);
-        printf("Current cell: (%d, %d)\n", CELL_X, CELL_Y);
+        // printf("Front wall detected at %.1d mm, cell (%d, %d)\n", MM[TOF_FRONT_IDX], cell_x, cell_y);
+        // printf("Current pose: x=%.2fmm, y=%.2fmm, theta=%.1fdeg\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI);
+        // printf("Current cell: (%d, %d)\n", CELL_X, CELL_Y);
         setWall(cell_x, cell_y, dir);
-    } else {
+    }
+    else
+    {
         printf("Front sensor not valid.\n");
     }
 }
 
-void scanWalls() {
+void scanWalls()
+{
     bool front_wall = wall_front();
     bool left_wall = wall_left();
     bool right_wall = wall_right();
@@ -753,94 +778,149 @@ void scanWalls() {
     int cell_x = CELL_X + OFFSET_LOCATIONS[dir].x;
     int cell_y = CELL_Y + OFFSET_LOCATIONS[dir].y;
 
-    if (front_wall) {
+    if (front_wall)
+    {
         setWall(cell_x, cell_y, dir);
     }
-    if (left_wall) {
+    if (left_wall)
+    {
         setWall(cell_x, cell_y, ROTATE_LEFT[dir]);
     }
-    if (right_wall) {
+    if (right_wall)
+    {
         setWall(cell_x, cell_y, ROTATE_RIGHT[dir]);
     }
-
-    floodFill();
 }
 
-bool atCellBoundary() {
+bool left_wall_seen()
+{
+    if (MM_VALID[TOF_SIDE_LEFT_IDX] && MM[TOF_SIDE_LEFT_IDX] < (1.5 * CELL_SIZE_MM))
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+bool right_wall_seen()
+{
+    if (MM_VALID[TOF_SIDE_RIGHT_IDX] && MM[TOF_SIDE_RIGHT_IDX] < (1.5 * CELL_SIZE_MM))
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+float get_cross_track_error()
+{
+    float feedback = 0.0f;
+
+    bool left_wall = left_wall_seen();
+    bool right_wall = right_wall_seen();
+
+    float left_error = CELL_SIZE_MM / 2 - MM[TOF_SIDE_LEFT_IDX];
+    float right_error = CELL_SIZE_MM / 2 - MM[TOF_SIDE_RIGHT_IDX];
+
+    float error = 0.0f;
+    if (left_wall && right_wall)
+    {
+        error = left_error - right_error;
+    }
+    else if (left_wall)
+    {
+        error = 2 * left_error;
+    }
+    else if (right_wall)
+    {
+        error = -2 * right_error;
+    }
+
+    return error;
+}
+
+#define STEERING_KP 0.1f
+#define STEERING_KD 0.01f
+#define STEERING_ADJUST_LIMIT 0.1f // Max adjustment in radians
+
+float last_cross_track_error = 0.0f;
+
+float constrain(float value, float min_val, float max_val) {
+    if (value < min_val) return min_val;
+    if (value > max_val) return max_val;
+    return value;
+}
+
+float calculate_steering_adjustment(float cross_track_error, float dt) {
+    // always calculate the adjustment for testing. It may not get used.
+    float pTerm = STEERING_KP * cross_track_error;
+    float dTerm = STEERING_KD * (cross_track_error - last_cross_track_error);
+    float adjustment = pTerm + dTerm * dt;
+
+    adjustment = constrain(adjustment, -STEERING_ADJUST_LIMIT, STEERING_ADJUST_LIMIT);
+    last_cross_track_error = cross_track_error;
+    return adjustment;
+}
+
+bool atCellBoundary()
+{
     Direction dir = theta_to_direction(POSE.theta);
 
     float x = fmodf(POSE.x + OFFSET_LOCATIONS[dir].x * LOCAL_TOF_BASE_OFFSET_X_MM, CELL_SIZE_MM);
     float y = fmodf(POSE.y - OFFSET_LOCATIONS[dir].y * LOCAL_TOF_BASE_OFFSET_X_MM, CELL_SIZE_MM);
-    //printf("At cell boundary check: x=%.2fmm, y=%.2fmm\n", x, y);
+    // printf("At cell boundary check: x=%.2fmm, y=%.2fmm\n", x, y);
 
-    bool at_boundary = (fabsf(x - CELL_SIZE_MM) < 5) || (fabsf(y - CELL_SIZE_MM) < 5);
-    if (at_boundary) {
+    bool at_boundary = (fabsf(x - CELL_SIZE_MM) < 2) || (fabsf(y - CELL_SIZE_MM) < 2);
+    if (at_boundary)
+    {
         printf("At cell boundary: x=%.2fmm, y=%.2fmm\n", POSE.x, POSE.y);
     }
     return at_boundary;
 }
 
-int main() {
-    printf("In main!\n");
+int main()
+{
     global_init();
-    printf("Inited!\n");
-    parse_maze_string(MAZE_ASCII_ART);
-    printf("Parsed!\n");
-    for (int r = 0; r < MAZE_SIZE; ++r)
-    {
-        for (int c = 0; c < MAZE_SIZE; ++c)
-        {
-            MOVE_MATRIX[r][c] = 255;
-            if (MAZE_MATRIX[r][c].north)
-            {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::TOP);
-            }
-            if (MAZE_MATRIX[r][c].south)
-            {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::BOTTOM);
-            }
-            if (MAZE_MATRIX[r][c].west)
-            {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::LEFT);
-            }
-            if (MAZE_MATRIX[r][c].east)
-            {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::RIGHT);
-            }
-        }
-    }
+
+   /* while (true) {
+        motorTest(MotorL);
+        motorTest(MotorR);
+
+        sleep_ms(1000);
+    }*/
+
+    // parse_maze_string(MAZE_ASCII_ART);
+
+    // IMPORTANT: Flood fill doesnt work if no outer walls
+    memset(MAZE_MATRIX, 0, sizeof(MAZE_MATRIX));
+    memset(MOVE_MATRIX, 255, sizeof(MOVE_MATRIX));
 
     for (int r = 0; r < MAZE_SIZE; ++r)
     {
         for (int c = 0; c < MAZE_SIZE; ++c)
         {
-            MOVE_MATRIX[r][c] = 255;
-            if (MAZE_MATRIX[r][c].north)
+            if (r == 0)
             {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::TOP);
+                setWall(c, r, Direction::TOP); // Top row is always a wall
             }
-            if (MAZE_MATRIX[r][c].south)
+            if (r == MAZE_SIZE - 1)
             {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::BOTTOM);
+                setWall(c, r, Direction::BOTTOM); // Bottom row is always a wall
             }
-            if (MAZE_MATRIX[r][c].west)
+            if (c == 0)
             {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::LEFT);
+                setWall(c, r, Direction::LEFT);
             }
-            if (MAZE_MATRIX[r][c].east)
+            if (c == MAZE_SIZE - 1)
             {
-                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::RIGHT);
+                setWall(c, r, Direction::RIGHT); // Right column is always a wall
             }
         }
     }
-
-    // print_maze();fr
-
-    //Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -PI/2}, Command{"FWD", 2}, Command{"STOP", 0}};
-    // Queue commandQueue = {Command{"FWD", 1}, Command{"FWD", 1}, Command{"FWD", 1}, Command{"FWD", 1}, Command{"FWD", 1}, Command{"TRN", -PI/2}, Command{"STOP", 0}};
-    Queue commandQueue = {Command{"FWD", 5}, Command{"STOP", 0}};
-
-    floodFill();
 
     printf("Finding fastest path...\n");
     Queue<Command> path = fastestPath();
@@ -848,12 +928,11 @@ int main() {
     Queue<Command> pathPrint = path;
 
     printf("Attempting to print path...\n");
-    while (!pathPrint.empty()) {
+    while (!pathPrint.empty())
+    {
         Command command = pathPrint.pop();
         printf("%s, %f\n", command.action.c_str(), command.value);
     }
-
-    STATE = STATE_FAST_RUN;
 
     // while (true) {
     //     MotorL.setPWM(50);
@@ -885,16 +964,14 @@ int main() {
     //     }
     // }
 
-    //parse_maze_string(MAZE_ASCII_ART);
-    
-    print_maze();
+    STATE = STATE_MAP_EXPLORE;
 
-    Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -PI/2}, Command{"FWD", 2}, Command{"STOP", 0}};
-    // Queue commandQueue = {Command{"FWD", 1},  Command{"STOP", 0}};
+    // Queue commandQueue = {Command{"FWD", 3}, Command{"TRN", -PI/2}, Command{"FWD", 2}, Command{"STOP", 0}};
+    Queue commandQueue = {Command{"FWD", 1}};
 
-    POSE.x = 80.0; // Start at the center of the first cell
-    POSE.y = 90.0; // Start at the center of the first cell
-    POSE.theta = PI / 2.0f;       // Facing "up" in the maze (0 degrees is +Y)
+    POSE.x = 80.0;          // Start at the center of the first cell
+    POSE.y = 90.0;          // Start at the center of the first cell
+    POSE.theta = PI / 2.0f; // Facing "up" in the maze (0 degrees is +Y)
 
     CELL_X = (int)(POSE.x / CELL_SIZE_MM);
     CELL_Y = 15 - (int)(POSE.y / CELL_SIZE_MM);
@@ -908,8 +985,6 @@ int main() {
 
     setTarget(commandQueue.pop());
 
-    setWall(CELL_X, CELL_Y, Direction::LEFT);
-    setWall(CELL_X, CELL_Y, Direction::BOTTOM);
     floodFill();
 
     while (true)
@@ -967,23 +1042,42 @@ int main() {
         {
             // Time how long it takes to update the pose
             uint64_t start_time = time_us_64();
-   
+
             motion_update(odom_dx_world_mm, odom_dy_world_mm, drot_rad_imu);
             localize_particles(); // Update particle weights and resample
 
-            estimate_pose_from_particles();
+            if (false) // (currentMovement == FWD)
+            {
+                // Update pose based on particles
+                estimate_pose_from_particles();
+            }
+            else
+            {
+                POSE.x += odom_dx_world_mm;
+                POSE.y += odom_dy_world_mm;
+                POSE.theta += drot_rad_imu;
+                // resample_particles(1.0f); // Resample particles around last pose
+            }
 
             uint64_t end_time = time_us_64();
             uint64_t elapsed_time = end_time - start_time;
-            //printf("Particles took %llu us\n", elapsed_time);
+            // printf("Particles took %llu us\n", elapsed_time);
         }
 
         CELL_X = (int)(POSE.x / CELL_SIZE_MM);
         CELL_Y = 15 - (int)(POSE.y / CELL_SIZE_MM);
 
-        if (atCellBoundary()) {
+        if (atCellBoundary() && currentMovement == FWD)
+        {
             scanWalls();
             scanFrontWall();
+        }
+
+        if (FLOOD_DIRTY)
+        {
+            floodFill();
+            printMaze();
+            FLOOD_DIRTY = false;
         }
 
         // printf("Estimated pose: x=%.2fmm, y=%.2fmm, th=%.1fdeg, cell=(%d,%d)\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI, CELL_X, CELL_Y);
@@ -1002,24 +1096,6 @@ int main() {
         printf(">>> vizTARGET %.2f %.2f %.2f\n", targetPose.x, targetPose.y, targetPose.theta);
         fflush(stdout);
 
-        if (targetReached)
-        {
-            //printf("--------------------------------------------Target reached or initial state. Planning next action.\n");
-            //printf("Current POSE before planning: x=%.2f, y=%.2f, th=%.1f\n", POSE.x, POSE.y, POSE.theta * 180.0f / (float)PI);
-
-            VContr.reset(); // Reset PID integrators for new maneuver
-            WContr.reset();
-
-            // Command next_cmd = decide_next_action_tof_based();
-            // Command next_cmd = commandQueue.pop();
-            // printf("Next command: %s, value: %.1f\n", next_cmd.action.c_str(), next_cmd.value);
-
-            // setTarget(next_cmd); // Updates global TARGET_POSE, prevTARGET_POSE, CURRENT_MOVEMENT, targetReached=false
-
-            // printf("New target set: x=%.2fm, y=%.2fm, th=%.1fdeg. Movement: %d. Target V:%.2f W:%.2f\n",
-            //        TARGET_POSE.x, TARGET_POSE.y, TARGET_POSE.theta, static_cast<int>(CURRENT_MOVEMENT), TARGET_POSE.v, TARGET_POSE.w);
-        }
-
         float rpm_L = MotorL.RPM;
         float rpm_R = MotorR.RPM;
         float v_wheel_L_mmps = rpm_L * (1.0f / 60.0f) * (2.0f * PI * WHEEL_RADIUS_MM);
@@ -1028,6 +1104,12 @@ int main() {
         POSE.v = (v_wheel_L_mmps + v_wheel_R_mmps) / 2.0f; // m/s
         // POSE.w = (rpm_R - rpm_L) / (WHEEL_BASE_M) * (2.0f * PI * WHEEL_RADIUS_M) / 60.0f; // rad/s (R>L means CCW for math angle, check convention)
         //                                                                                     // If using "setTarget" theta, R>L is a left turn (positive W)
+
+        float cross_track_error = get_cross_track_error();
+        float steering_feedback = calculate_steering_adjustment(cross_track_error, dt);
+
+        printf("Steering feedback: %.2f\n", steering_feedback);
+        POSE.w += steering_feedback;
 
         float v_effort = VContr.output(targetPose.v, POSE.v); // targetPose.v in mm/s
         float w_effort = WContr.output(targetPose.w, POSE.w); // targetPose.w (from Stanley) in rad/s
@@ -1048,11 +1130,52 @@ int main() {
 
             if (targetReached)
             {
-                Command next_cmd = commandQueue.pop();
-                setTarget(next_cmd);
+                VContr.reset(); // Reset PID integrators for new maneuver
+                WContr.reset();
+
+                Direction minFloodFillDir;
+                int minFloodFill = 255;
+                int x1, y1;
+
+                uint8_t mask = MOVE_MATRIX[CELL_Y][CELL_X];
+                for (int i = 0; i < 4; ++i)
+                {
+                    if (!(mask & (1 << i)))
+                        continue;
+
+                    int nx = CELL_X + OFFSET_LOCATIONS[i].x;
+                    int ny = CELL_Y + OFFSET_LOCATIONS[i].y;
+
+                    if (FLOOD_MATRIX[ny][nx] <= minFloodFill)
+                    {
+                        minFloodFill = FLOOD_MATRIX[ny][nx];
+                        minFloodFillDir = (Direction)i;
+                        x1 = nx;
+                        y1 = ny;
+                    }
+                }
+
+                Command nextCommand;
+
+                Direction currentDir = theta_to_direction(POSE.theta);
+                if (currentDir == minFloodFillDir)
+                {
+                    nextCommand = Command{"FWD", 1};
+                }
+                else if (minFloodFillDir - currentDir == -1 || minFloodFillDir - currentDir == 3)
+                {
+                    nextCommand = Command {"TRN", PI/2.0};
+                }
+                else if (minFloodFillDir - currentDir == 1 || minFloodFillDir - currentDir == -3)
+                {
+                    nextCommand = Command {"TRN", -PI/2.0};
+                }
+                setTarget(nextCommand);
+
+                scanFrontWall();
 
                 printf("---------------------------------------------Target reached! New target set.\n");
-                printf("Next command: %s, value: %.1f\n", next_cmd.action.c_str(), next_cmd.value);
+                printf("Next command: %s, value: %.1f\n", nextCommand.action.c_str(), nextCommand.value);
 
                 // currentMovement = IDLE; // Optional: transition to IDLE
             }
@@ -1070,21 +1193,20 @@ int main() {
               targetReached, static_cast<int>(currentMovement), w_ref_stanley_radps, duty_L_percent, duty_R_percent);*/
         }
     }
-    
-    if (STATE = STATE_FAST_RUN) {
-        // Init fastest path 
+
+    if (STATE = STATE_FAST_RUN)
+    {
+        // Init fastest path
         floodFill();
         commandQueue = fastestPath();
 
         setTarget(commandQueue.pop());
-        while (true) {
-
-
+        while (true)
+        {
         }
     }
-
     return 0;
-} 
+}
 
 /*
 

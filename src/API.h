@@ -68,8 +68,10 @@ void sleep_ms(uint32_t ms);
 inline Cell MAZE_MATRIX[MAZE_SIZE][MAZE_SIZE] = {}; // Init to empty with = {};
 inline byte FLOOD_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
 inline byte FLOOD_GEN_MATRIX[MAZE_SIZE][MAZE_SIZE] = {};
-inline byte MOVE_MATRIX[MAZE_SIZE][MAZE_SIZE];
+inline byte MOVE_MATRIX[MAZE_SIZE][MAZE_SIZE] = {255};
 inline byte CURRENT_FLOOD_GEN = 0;
+
+inline bool FLOOD_DIRTY = false; // Set to true when flood fill is needed, false when it is not
 
 //
 // Sensor readings, long range one is updated around 40 Hz, short range ones around 20 Hz
@@ -92,6 +94,8 @@ inline void setWall(int x, int y, Direction dir)
         MAZE_MATRIX[n.y][n.x].walls |= (1 << OPPOSITE[dir]);
         MOVE_MATRIX[n.y][n.x] &= ~(1 << OPPOSITE[dir]);
     }
+
+    FLOOD_DIRTY = true;
 
     setWall_UI(x, y, dir);
 }

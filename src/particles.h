@@ -111,14 +111,14 @@ inline RayMarchResult fast_ray_march_cpp(
             { // Stepping in X
                 if (ray_step_x > 0)
                 { // Moving Right (+X world)
-                    if (current_cell.east)
+                    if (current_cell.right)
                     { // Check cell's east wall
                         return {ray_origin_world + ray_dir_normalized * current_distance_to_boundary, true};
                     }
                 }
                 else if (ray_step_x < 0)
                 { // Moving Left (-X world)
-                    if (current_cell.west)
+                    if (current_cell.left)
                     { // Check cell's west wall
                         return {ray_origin_world + ray_dir_normalized * current_distance_to_boundary + Vec2f(WALL_THICKNESS_MM, 0), true};
                     }
@@ -128,14 +128,14 @@ inline RayMarchResult fast_ray_march_cpp(
             { // Stepping in Y
                 if (ray_step_y > 0)
                 { // Moving "Up" in world coords (+Y world)
-                    if (current_cell.north)
+                    if (current_cell.top)
                     { // Check cell's north wall
                         return {ray_origin_world + ray_dir_normalized * current_distance_to_boundary, true};
                     }
                 }
                 else if (ray_step_y < 0)
                 { // Moving "Down" in world coords (-Y world)
-                    if (current_cell.south)
+                    if (current_cell.bottom)
                     { // Check cell's south wall
                         return {ray_origin_world + ray_dir_normalized * current_distance_to_boundary + Vec2f(0, WALL_THICKNESS_MM), true};
                     }
@@ -272,32 +272,7 @@ inline void update_tof_sensor_data_ray_marching_cpp(
     }
 }
 
-inline void print_maze()
-{
-    for (int r_idx = 0; r_idx < MAZE_SIZE; ++r_idx)
-    {
-        for (int c_idx = 0; c_idx < MAZE_SIZE; ++c_idx)
-        {
-            printf("+");
-            printf("%s", (MAZE_MATRIX[r_idx][c_idx].north ? "---" : "   "));
-        }
-        printf("+\n");
-
-        for (int c_idx = 0; c_idx < MAZE_SIZE; ++c_idx)
-        {
-            printf("%s", (MAZE_MATRIX[r_idx][c_idx].west ? "|" : " "));
-            printf("   ");
-        }
-        printf("%s", (MAZE_MATRIX[r_idx][MAZE_SIZE - 1].east ? "|" : " "));
-        printf("\n");
-    }
-    for (int c_idx = 0; c_idx < MAZE_SIZE; ++c_idx)
-    {
-        printf("+");
-        printf("%s", (MAZE_MATRIX[MAZE_SIZE - 1][c_idx].south ? "---" : "   "));
-    }
-    printf("+\n");
-}
+void printMaze();
 
 // IMPORTANT: Ensure this string has consistent newlines ('\n') after each line of characters.
 // The parser assumes a fixed stride including the newline.
@@ -364,7 +339,7 @@ inline void parse_maze_string(const char *maze_str_input)
             char north_char = current_pos[north_wall_text_line_idx * string_stride + north_wall_char_idx_in_line];
             if (north_char == '-')
             {
-                MAZE_MATRIX[cell_r][cell_c].north = 1;
+                MAZE_MATRIX[cell_r][cell_c].top = 1;
             }
 
             // South Wall: on text line `(cell_r * 2) + 2`, at character `cell_c * 4 + 2` within that line.
@@ -373,7 +348,7 @@ inline void parse_maze_string(const char *maze_str_input)
             char south_char = current_pos[south_wall_text_line_idx * string_stride + south_wall_char_idx_in_line];
             if (south_char == '-')
             {
-                MAZE_MATRIX[cell_r][cell_c].south = 1;
+                MAZE_MATRIX[cell_r][cell_c].bottom = 1;
             }
 
             // West Wall: on text line `(cell_r * 2) + 1`, at character `cell_c * 4` within that line.
@@ -382,7 +357,7 @@ inline void parse_maze_string(const char *maze_str_input)
             char west_char = current_pos[west_wall_text_line_idx * string_stride + west_wall_char_idx_in_line];
             if (west_char == '|')
             {
-                MAZE_MATRIX[cell_r][cell_c].west = 1;
+                MAZE_MATRIX[cell_r][cell_c].left = 1;
             }
 
             // East Wall: on text line `(cell_r * 2) + 1`, at character `(cell_c * 4) + 4` within that line.
@@ -391,11 +366,36 @@ inline void parse_maze_string(const char *maze_str_input)
             char east_char = current_pos[east_wall_text_line_idx * string_stride + east_wall_char_idx_in_line];
             if (east_char == '|')
             {
-                MAZE_MATRIX[cell_r][cell_c].east = 1;
+                MAZE_MATRIX[cell_r][cell_c].right = 1;
             }
 
             // Visited is not set by this parser, defaults to 0.
             MAZE_MATRIX[cell_r][cell_c].visited = 0;
+        }
+    }
+
+
+    for (int r = 0; r < MAZE_SIZE; ++r)
+    {
+        for (int c = 0; c < MAZE_SIZE; ++c)
+        {
+            MOVE_MATRIX[r][c] = 255;
+            if (MAZE_MATRIX[r][c].top)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::TOP);
+            }
+            if (MAZE_MATRIX[r][c].bottom)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::BOTTOM);
+            }
+            if (MAZE_MATRIX[r][c].left)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::LEFT);
+            }
+            if (MAZE_MATRIX[r][c].right)
+            {
+                MOVE_MATRIX[r][c] &= ~(1 << (int)Direction::RIGHT);
+            }
         }
     }
 }

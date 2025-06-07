@@ -307,7 +307,7 @@ def fast_ray_march(
 
 ANGLE_OFFSETS_TOF = np.array([0, np.pi / 2, -np.pi / 2, np.pi / 4, -np.pi / 4]) + np.pi/2
 
-LOCAL_TOF_OFFSET = np.array([6.5, 0]) * SCALE
+LOCAL_TOF_OFFSET = np.array([5, 0]) * SCALE
 LOCAL_TOF_OFFSET_RADIUS = 2.5 * SCALE
 
 def rotate_vector(v, rot):
@@ -580,7 +580,7 @@ class Mouse(Body):
         self.left_pos += self.left_rpm * circ / 60 * dt / SCALE
         self.right_pos += self.right_rpm * circ / 60 * dt / SCALE
 
-        # print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}, left pos: {self.left_pos}, right pos: {self.right_pos} dt: {dt}")
+        print(f"Left 🛞 RPM: {self.left_rpm:.1f}, Right 🛞 RPM: {self.right_rpm:.1f}, left pwm: {clamped_left_pwm}, right pwm: {clamped_right_pwm}, left pos: {self.left_pos}, right pos: {self.right_pos} dt: {dt}")
 
         v = (self.left_rpm + self.right_rpm) / 2 * circ / 60
         omega = (self.right_rpm - self.left_rpm) * circ / (60 * wb)

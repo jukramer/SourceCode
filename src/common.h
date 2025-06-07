@@ -114,7 +114,7 @@ struct Queue
     force_inline T pop() { return buffer[tail++ & 255]; }
 };
 
-Queue<Command> fastestPath();
+Queue<Command> fastestPath(Location currentCell = {0, 15}, Direction currentDir = Direction::TOP, int max_N = 100);
 
 struct StatePrediction
 {
@@ -129,10 +129,10 @@ struct Cell
     {
         struct
         {
-            byte north : 1;  // 1 bit for the north wall
-            byte east : 1;   // 1 bit for the east wall
-            byte south : 1;  // 1 bit for the south wall
-            byte west : 1;   // 1 bit for the west wall
+            byte top : 1;  // 1 bit for the north wall
+            byte right : 1;   // 1 bit for the east wall
+            byte bottom : 1;  // 1 bit for the south wall
+            byte left : 1;   // 1 bit for the west wall
             bool visited : 1;     // 1 bit for visited status
         };
         byte walls;
@@ -209,13 +209,13 @@ constexpr Vec2f OFFSET_VECTORS[4] = {
 #define WHEEL_BASE_MM 90
 #define CELL_SIZE_MM 180.0f
 
-#define SENSOR_NOISE_STDDEV 0.1f
+#define SENSOR_NOISE_STDDEV 5.0f
 #define SENSOR_NOISE_VAR (SENSOR_NOISE_STDDEV * SENSOR_NOISE_STDDEV)
 
 #define DEFAULT_MAX_SENSOR_RANGE_MM 255.0f
 #define FRONT_MAX_SENSOR_RANGE_MM (10.0f * 255.0f)
 
-#define LOCAL_TOF_BASE_OFFSET_X_MM 70.0f // Offset along robot's local X-axis
+#define LOCAL_TOF_BASE_OFFSET_X_MM 5.0f // Offset along robot's local X-axis
 #define LOCAL_TOF_RADIAL_OFFSET_MM 25.0f // Additional radial offset for each sensor
 
 #define WALL_THICKNESS_MM 12.0f // Wall thickness in mm
